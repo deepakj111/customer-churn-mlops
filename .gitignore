@@ -12,9 +12,14 @@ build/
 *.ipynb_metadata
 
 # Data (managed by DVC, not Git)
-data/raw/
-data/processed/
-data/reference/
+# Ignore actual data files but allow DVC tracking files
+data/**/*.csv
+data/**/*.json
+data/**/*.parquet
+data/**/*.xlsx
+data/**/*.zip
+!data/**/.gitignore
+!data/**/*.dvc
 *.csv
 *.parquet
 
