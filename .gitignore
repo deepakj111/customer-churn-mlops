@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_metadata
+
+# Data (managed by DVC, not Git)
+data/raw/
+data/processed/
+data/reference/
+*.csv
+*.parquet
+
+# Models (managed by MLflow/DVC, not Git)
+*.pkl
+*.joblib
+*.model
+mlruns/
+
+# Reports (auto-generated)
+reports/
+
+# Environment
+.env
+.env.local
+*.env
+
+# Docker
+docker/volumes/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# DVC
+/tmp
