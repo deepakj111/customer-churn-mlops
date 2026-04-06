@@ -1,0 +1,28 @@
+# Thresholds that trigger alerts and retraining in the monitoring layer.
+# All values are tunable without touching Python code.
+
+# Input drift — Population Stability Index
+# PSI < 0.10: no shift, PSI 0.10-0.25: moderate, PSI > 0.25: significant drift
+psi_threshold: 0.25
+
+# Categorical feature drift — Chi-squared test
+# Alert if p-value drops below this significance level
+chi_squared_alpha: 0.05
+
+# Prediction drift — rolling mean of churn probability
+# Alert if 7-day mean shifts more than 15% relative to the training baseline
+prediction_drift_threshold: 0.15
+
+# Performance drift — F1 score drop vs. 30-day rolling baseline
+# Triggers automated retraining pipeline when exceeded
+performance_drop_threshold: 0.05
+
+# How many days of training data to use as the drift reference snapshot
+reference_window_days: 90
+
+# How many recent days of production requests to compare against reference
+monitoring_window_days: 7
+
+# Days to wait before ground truth churn labels become available
+# Used to schedule the delayed performance evaluation job
+label_delay_days: 45

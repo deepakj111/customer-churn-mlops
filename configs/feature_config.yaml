@@ -1,0 +1,47 @@
+# Single source of truth for all column names and feature lists.
+# Every module imports these via get_config().features —
+# column names are never hardcoded anywhere else in the codebase.
+
+target_column: Churn
+customer_id_column: customerID
+
+# Raw numerical columns from the original dataset
+numerical_features:
+  - tenure
+  - MonthlyCharges
+  - TotalCharges
+
+# Raw categorical columns from the original dataset
+# SeniorCitizen is originally 0/1 integer but treated as categorical
+categorical_features:
+  - gender
+  - SeniorCitizen
+  - Partner
+  - Dependents
+  - PhoneService
+  - MultipleLines
+  - InternetService
+  - OnlineSecurity
+  - OnlineBackup
+  - DeviceProtection
+  - TechSupport
+  - StreamingTV
+  - StreamingMovies
+  - Contract
+  - PaperlessBilling
+  - PaymentMethod
+
+# Columns to drop before training — IDs carry no signal
+features_to_drop:
+  - customerID
+
+# Features created by ChurnFeatureEngineer in src/features/transformers.py
+engineered_features:
+  - tenure_group
+  - avg_charge_per_service
+  - service_adoption_count
+  - is_month_to_month
+  - has_protection_bundle
+  - charge_to_tenure_ratio
+  - is_senior_no_support
+  - payment_auto

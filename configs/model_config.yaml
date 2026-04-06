@@ -1,0 +1,27 @@
+# Champion model identity and hyperparameters.
+# These are the best values found during notebook 05 (HPO deep-dive).
+# Changing these values here changes what train.py trains with —
+# no code changes needed.
+
+model_name: churn-predictor
+algorithm: lightgbm
+champion_stage: Production
+
+hyperparameters:
+  n_estimators: 500
+  learning_rate: 0.05
+  num_leaves: 31
+  max_depth: -1
+  min_child_samples: 20
+  feature_fraction: 0.8
+  bagging_fraction: 0.8
+  bagging_freq: 5
+  lambda_l1: 0.1
+  lambda_l2: 0.1
+  # scale_pos_weight handles class imbalance.
+  # Value = count(negatives) / count(positives) = ~73.5 / 26.5 = ~2.77
+  # We round to 2.8. Revisit after EDA confirms exact ratio.
+  scale_pos_weight: 2.8
+  random_state: 42
+  n_jobs: -1
+  verbose: -1
