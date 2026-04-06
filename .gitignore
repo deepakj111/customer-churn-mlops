@@ -50,3 +50,4 @@ Thumbs.db
 
 # DVC
 /tmp
+\n# Generated notebook reports\nreports/*.png\nreports/*.html

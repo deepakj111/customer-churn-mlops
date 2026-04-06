@@ -3,7 +3,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^notebooks/
       - id: end-of-file-fixer
+        exclude: ^notebooks/
       - id: check-yaml
       - id: check-added-large-files
         args: ['--maxkb=1000']   # Block files > 500KB from being committed
@@ -13,16 +15,19 @@ repos:
     rev: 24.10.0
     hooks:
       - id: black
+        exclude: ^notebooks/
         language_version: python3.11
 
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
+        exclude: ^notebooks/
         args: ["--profile", "black"]
 
   - repo: https://github.com/pycqa/flake8
     rev: 7.1.1
     hooks:
       - id: flake8
+        exclude: ^notebooks/
         args: ['--max-line-length=88']   # Match black's default
