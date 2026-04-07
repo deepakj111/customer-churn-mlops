@@ -1,20 +1,10 @@
-# Controls how training runs are structured.
-# Separated from model_config.yaml so experiment structure and
-# model hyperparameters can be versioned independently.
+# Training configuration — read by config_loader as cfg.training.*
+# No top-level wrapper key.
 
-# Data split ratios — must sum to 1.0
-# 70% train, 10% val (threshold tuning), 20% test (final held-out evaluation)
-test_size: 0.2
-val_size: 0.1
-
-random_seed: 42
+test_size: 0.20
+random_state: 42
+stratify: true
 cv_folds: 5
-
-# MLflow experiment name — all training runs group under this name on DagsHub
-experiment_name: churn-prediction
-
-# Business cost matrix for threshold optimization in src/models/threshold.py
-# fn_cost: estimated revenue lost from one missed churner (annual contract value)
-# fp_cost: cost of one unnecessary retention offer (discount + agent time)
-fn_cost: 500.0
-fp_cost: 20.0
+cv_scoring: "roc_auc"
+model_output_dir: "models/"
+reports_output_dir: "reports/"
