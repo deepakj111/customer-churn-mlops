@@ -35,8 +35,9 @@ def config_dir(tmp_path):
     training_data = {
         "test_size": 0.2,
         "val_size": 0.1,
-        "random_seed": 42,
+        "random_state": 42,
         "cv_folds": 5,
+        "cv_scoring": "roc_auc",
         "experiment_name": "test-experiment",
         "fn_cost": 500.0,
         "fp_cost": 20.0,
@@ -97,7 +98,7 @@ def test_training_config_loads_correctly(config_dir):
     loader = ConfigLoader(config_dir=str(config_dir))
     config = loader.training
     assert isinstance(config, TrainingConfig)
-    assert config.random_seed == 42
+    assert config.random_state == 42
     assert config.cv_folds == 5
     assert config.fn_cost == 500.0
     assert config.fp_cost == 20.0

@@ -78,8 +78,9 @@ class TrainingConfig:
 
     test_size: float
     val_size: float
-    random_seed: int
+    random_state: int
     cv_folds: int
+    cv_scoring: str
     experiment_name: str
     fn_cost: float
     fp_cost: float

@@ -155,3 +155,44 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
     )
 
     return pipeline
+
+
+def build_baseline_pipeline(classifier) -> Pipeline:
+    """
+    Build a sklearn Pipeline for baseline and ensemble experimentation.
+
+    Uses the identical feature engineering and preprocessing as build_pipeline(),
+    but accepts any sklearn-compatible estimator. This ensures every algorithm
+    comparison in notebooks 03 and 04 is a pure algorithm comparison —
+    same features, same preprocessing, different model.
+
+    Args:
+        classifier: Any unfitted sklearn-compatible estimator.
+
+    Returns:
+        Unfitted sklearn Pipeline with three named steps:
+            'feature_engineering', 'preprocessor', 'classifier'
+    """
+    pipeline = Pipeline(
+        steps=[
+            (
+                "feature_engineering",
+                FunctionTransformer(engineer_features, validate=False),
+            ),
+            (
+                "preprocessor",
+                get_preprocessor(),
+            ),
+            (
+                "classifier",
+                classifier,
+            ),
+        ]
+    )
+
+    logger.debug(
+        "Baseline pipeline built — classifier: %s",
+        type(classifier).__name__,
+    )
+
+    return pipeline

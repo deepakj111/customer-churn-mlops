@@ -1,10 +1,9 @@
-# Training configuration — read by config_loader as cfg.training.*
-# No top-level wrapper key.
-
-test_size: 0.20
+# configs/training_config.yaml
+test_size: 0.2
+val_size: 0.1
 random_state: 42
-stratify: true
 cv_folds: 5
-cv_scoring: "roc_auc"
-model_output_dir: "models/"
-reports_output_dir: "reports/"
+cv_scoring: roc_auc
+experiment_name: churn-prediction-experiments
+fn_cost: 500.0
+fp_cost: 20.0

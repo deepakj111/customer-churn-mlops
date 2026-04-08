@@ -1,18 +1,16 @@
-# Single source of truth for all column names and feature lists.
-# Every module imports these via get_config().features —
-# column names are never hardcoded anywhere else in the codebase.
+# configs/feature_config.yaml
+# Single source of truth for feature column names used by config-driven code.
+# The featurestore.py module is the authoritative source for routing logic.
+# This file is used only by ConfigLoader for any config-driven feature access.
 
 target_column: Churn
 customer_id_column: customerID
 
-# Raw numerical columns from the original dataset
 numerical_features:
   - tenure
   - MonthlyCharges
   - TotalCharges
 
-# Raw categorical columns from the original dataset
-# SeniorCitizen is originally 0/1 integer but treated as categorical
 categorical_features:
   - gender
   - SeniorCitizen
@@ -31,17 +29,42 @@ categorical_features:
   - PaperlessBilling
   - PaymentMethod
 
-# Columns to drop before training — IDs carry no signal
 features_to_drop:
   - customerID
 
-# Features created by ChurnFeatureEngineer in src/features/transformers.py
 engineered_features:
+  # Original 7 — Phase 1
   - tenure_group
-  - avg_charge_per_service
-  - service_adoption_count
   - is_month_to_month
+  - service_adoption_count
   - has_protection_bundle
   - charge_to_tenure_ratio
-  - is_senior_no_support
-  - payment_auto
+  - is_fiber_optic
+  - avg_charge_per_service
+  # Group A — Demographic
+  - has_family
+  - is_isolated
+  - senior_no_support
+  # Group B — Billing / Payment
+  - is_auto_pay
+  - is_electronic_check
+  - is_high_monthly_charge
+  - monthly_charge_bin
+  - charges_gap
+  # Group C — Service Depth
+  - has_internet
+  - streaming_count
+  - security_service_count
+  - has_full_streaming
+  - internet_addon_count
+  - has_no_internet_addons
+  # Group D — Contract / Commitment
+  - contract_numeric
+  - is_committed_customer
+  # Group E — Interaction / Compound
+  - m2m_and_fiber
+  - new_high_value_customer
+  - fiber_no_security
+  - paperless_and_echeck
+  # Group F — Composite
+  - composite_churn_risk
