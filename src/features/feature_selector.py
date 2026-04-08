@@ -539,9 +539,11 @@ def run_full_selection(
                 ),
             ]
         )
-        return cross_val_score(
-            pipe, X_enc, y, cv=cv, scoring="average_precision", n_jobs=-1
-        ).mean()
+        return float(
+            cross_val_score(
+                pipe, X_enc, y, cv=cv, scoring="average_precision", n_jobs=1
+            ).mean()
+        )
 
     cv_all = _cv_prauc(X_filtered)
     cv_sel = _cv_prauc(X_engineered[selected]) if selected else 0.0

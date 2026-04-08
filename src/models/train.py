@@ -5,7 +5,7 @@ This module wires together every module built so far:
     ingest      → load raw CSV
     validate    → schema check + TotalCharges fix
     preprocess  → encode target, drop customerID, split X/y
-    feature_store → engineer 7 new features (inside the Pipeline)
+    feature_store → engineer 28 new features (inside the Pipeline)
     pipeline    → build sklearn Pipeline (feature_eng + preprocessor + LGBM)
     threshold   → find cost-optimal decision threshold
     evaluate    → compute ML + business metrics
@@ -24,9 +24,13 @@ Public API:
     run_training_experiment(params) → dict of final metrics
 """
 
+import datetime
+import os
+
 import mlflow
 import mlflow.sklearn
 import pandas as pd
+from dotenv import load_dotenv
 from mlflow.models import infer_signature
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 
@@ -77,6 +81,7 @@ def _log_params_to_mlflow(pipeline, cfg) -> None:
     params = classifier.get_params()
     mlflow.log_params(params)
     mlflow.log_param("test_size", cfg.training.test_size)
+    mlflow.log_param("val_size", cfg.training.val_size)
     mlflow.log_param("cv_folds", cfg.training.cv_folds)
     mlflow.log_param("random_state", cfg.training.random_state)
 
@@ -103,13 +108,17 @@ def run_training_experiment(
 
     Flow:
         1. Load + validate + preprocess data
-        2. Stratified train/test split (80/20)
+        2. Stratified train/val/test split (70/10/20)
         3. 5-fold cross-validation on train set (ROC-AUC)
         4. Fit final pipeline on full train set
-        5. Find cost-optimal threshold on test set
-        6. Evaluate on test set with optimised threshold
+        5. Find cost-optimal threshold on VALIDATION set (not test)
+        6. Evaluate on held-out TEST set with the chosen threshold
         7. Log all params, metrics, and model to MLflow
         8. Register model in MLflow Model Registry if gates pass
+
+    The validation set is used exclusively for threshold tuning.
+    The test set is touched only once — for the final unbiased evaluation.
+    This prevents data leakage from threshold optimisation.
 
     Args:
         params:   Optional LightGBM hyperparameter overrides.
@@ -121,18 +130,18 @@ def run_training_experiment(
         Dict of final test set metrics (same structure as evaluate()).
         Includes "mlflow_run_id" and "optimal_threshold" keys.
     """
+    load_dotenv()
     cfg = get_config()
 
-    mlflow.set_tracking_uri(
-        "http://localhost:5000"
-        if not hasattr(cfg, "mlflow") or not cfg.mlflow.get("tracking_uri")
-        else cfg.mlflow.tracking_uri
-    )
-    mlflow.set_experiment(cfg.model.experiment_name)
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
+
+    mlflow.set_experiment(cfg.training.experiment_name)
 
     X, y = build_training_data()
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    # --- 3-way stratified split: train (70%) / val (10%) / test (20%) ---
+    # First split: train+val (80%) vs test (20%)
+    X_trainval, X_test, y_trainval, y_test = train_test_split(
         X,
         y,
         test_size=cfg.training.test_size,
@@ -140,17 +149,28 @@ def run_training_experiment(
         stratify=y,
     )
 
+    # Second split: train (70% of total) vs val (10% of total)
+    # val_size is expressed as fraction of total, so relative to trainval
+    # it is val_size / (1 - test_size)
+    relative_val_size = cfg.training.val_size / (1.0 - cfg.training.test_size)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_trainval,
+        y_trainval,
+        test_size=relative_val_size,
+        random_state=cfg.training.random_state,
+        stratify=y_trainval,
+    )
+
     logger.info(
-        "Split — train: %d rows, test: %d rows",
+        "Split — train: %d rows, val: %d rows, test: %d rows",
         len(X_train),
+        len(X_val),
         len(X_test),
     )
 
     pipeline = build_pipeline(params)
 
     if run_name is None:
-        import datetime
-
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         run_name = f"lgbm_churn_{ts}"
 
@@ -171,7 +191,7 @@ def run_training_experiment(
             y_train,
             cv=cv,
             scoring=cfg.training.cv_scoring,
-            n_jobs=-1,
+            n_jobs=1,
         )
         cv_mean = round(float(cv_scores.mean()), 4)
         cv_std = round(float(cv_scores.std()), 4)
@@ -183,18 +203,20 @@ def run_training_experiment(
         logger.info("Fitting pipeline on full training set...")
         pipeline.fit(X_train, y_train)
 
-        # Step 3 — Find optimal threshold on test set
-        y_test_proba = pipeline.predict_proba(X_test)[:, 1]
-        optimal_threshold = find_cost_optimal_threshold(y_test_proba, y_test)
-        f1_threshold = find_f1_optimal_threshold(y_test_proba, y_test)
+        # Step 3 — Find optimal threshold on VALIDATION set (not test)
+        # This prevents data leakage: the threshold is tuned on val,
+        # and the test set remains untouched until final evaluation.
+        y_val_proba = pipeline.predict_proba(X_val)[:, 1]
+        optimal_threshold = find_cost_optimal_threshold(y_val.values, y_val_proba)
+        f1_threshold = find_f1_optimal_threshold(y_val.values, y_val_proba)
         mlflow.log_metric("optimal_threshold", optimal_threshold)
         mlflow.log_metric("f1_threshold", f1_threshold)
 
-        # Step 4 — Evaluate on test set with optimal threshold
+        # Step 4 — Evaluate on held-out TEST set with threshold from val
+        y_test_proba = pipeline.predict_proba(X_test)[:, 1]
         test_metrics = evaluate(y_test.values, y_test_proba, optimal_threshold)
         _log_params_to_mlflow(pipeline, cfg)
         _log_metrics_to_mlflow(test_metrics, prefix="test_")
-        mlflow.log_metric("cv_mean_roc_auc", cv_mean)
 
         print_evaluation_report(test_metrics, split_name="Test")
 

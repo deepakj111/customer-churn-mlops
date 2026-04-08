@@ -297,7 +297,7 @@ def add_is_month_to_month(df: pd.DataFrame) -> pd.DataFrame:
 def add_service_adoption_count(df: pd.DataFrame) -> pd.DataFrame:
     """Count the number of active services a customer subscribes to (0-9).
 
-    Services counted (8 possible):
+    Services counted (9 possible):
         PhoneService, MultipleLines, InternetService,
         OnlineSecurity, OnlineBackup, DeviceProtection,
         TechSupport, StreamingTV, StreamingMovies

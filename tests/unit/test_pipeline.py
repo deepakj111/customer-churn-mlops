@@ -97,25 +97,25 @@ class TestBuildPipeline:
         assert names == ["feature_engineering", "preprocessor", "classifier"]
 
     def test_param_override_applied(self):
-        pipeline = build_pipeline(params={"n_estimators": 10})
+        pipeline = build_pipeline(params={"random_state": 42})
         clf = pipeline.named_steps["classifier"]
-        assert clf.n_estimators == 10
+        assert clf.random_state == 42
 
     def test_pipeline_can_fit_and_predict(self, minimal_X, minimal_y):
-        pipeline = build_pipeline(params={"n_estimators": 5})
+        pipeline = build_pipeline()
         pipeline.fit(minimal_X, minimal_y)
         predictions = pipeline.predict(minimal_X)
         assert len(predictions) == 2
         assert set(predictions).issubset({0, 1})
 
     def test_predict_proba_returns_two_columns(self, minimal_X, minimal_y):
-        pipeline = build_pipeline(params={"n_estimators": 5})
+        pipeline = build_pipeline()
         pipeline.fit(minimal_X, minimal_y)
         probas = pipeline.predict_proba(minimal_X)
         assert probas.shape == (2, 2)
 
     def test_probabilities_sum_to_one(self, minimal_X, minimal_y):
-        pipeline = build_pipeline(params={"n_estimators": 5})
+        pipeline = build_pipeline()
         pipeline.fit(minimal_X, minimal_y)
         probas = pipeline.predict_proba(minimal_X)
         np.testing.assert_allclose(probas.sum(axis=1), 1.0, atol=1e-6)

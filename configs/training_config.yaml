@@ -5,5 +5,3 @@ random_state: 42
 cv_folds: 5
 cv_scoring: roc_auc
 experiment_name: churn-prediction-experiments
-fn_cost: 500.0
-fp_cost: 20.0

@@ -32,7 +32,7 @@ def test_default_level_is_info(monkeypatch):
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     # Use a unique name so the handler-guard doesn't interfere
     logger = get_logger("test.defaultlevel")
-    assert logger.level in (logging.INFO, logging.DEBUG, logging.WARNING)
+    assert logger.level == logging.INFO
 
 
 def test_logger_has_at_least_one_handler():

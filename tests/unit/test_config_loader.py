@@ -39,8 +39,6 @@ def config_dir(tmp_path):
         "cv_folds": 5,
         "cv_scoring": "roc_auc",
         "experiment_name": "test-experiment",
-        "fn_cost": 500.0,
-        "fp_cost": 20.0,
     }
     monitoring_data = {
         "psi_threshold": 0.25,
@@ -100,8 +98,6 @@ def test_training_config_loads_correctly(config_dir):
     assert isinstance(config, TrainingConfig)
     assert config.random_state == 42
     assert config.cv_folds == 5
-    assert config.fn_cost == 500.0
-    assert config.fp_cost == 20.0
 
 
 # ---------------------------------------------------------------------------

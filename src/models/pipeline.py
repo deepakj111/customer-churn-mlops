@@ -26,10 +26,18 @@ Public API:
     get_preprocessor()       → unfitted ColumnTransformer (for inspection)
 """
 
+from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    GradientBoostingClassifier,
+    RandomForestClassifier,
+)
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
+from xgboost import XGBClassifier
 
 from src.features.feature_store import (
     engineer_features,
@@ -41,6 +49,16 @@ from src.utils.config_loader import get_config
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+ALGORITHM_MAP = {
+    "lightgbm": LGBMClassifier,
+    "xgboost": XGBClassifier,
+    "catboost": CatBoostClassifier,
+    "random_forest": RandomForestClassifier,
+    "extra_trees": ExtraTreesClassifier,
+    "gradient_boosting": GradientBoostingClassifier,
+    "logistic_regression": LogisticRegression,
+}
 
 
 def get_preprocessor() -> ColumnTransformer:
@@ -122,14 +140,22 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
             'feature_engineering', 'preprocessor', 'classifier'
     """
     cfg = get_config()
-    # lgbm_params = dict(cfg.model.lightgbm)
-    lgbm_params = dict(cfg.model.hyperparameters)
+    algo_name = getattr(cfg.model, "algorithm", "lightgbm").lower()
+
+    if algo_name not in ALGORITHM_MAP:
+        raise ValueError(
+            f"Unknown algorithm '{algo_name}' in config. "
+            f"Must be one of {list(ALGORITHM_MAP.keys())}"
+        )
+
+    model_params = dict(cfg.model.hyperparameters)
 
     if params:
-        lgbm_params.update(params)
+        model_params.update(params)
         logger.debug("Pipeline built with param overrides: %s", params)
 
-    classifier = LGBMClassifier(**lgbm_params)
+    classifier_class = ALGORITHM_MAP[algo_name]
+    classifier = classifier_class(**model_params)
 
     pipeline = Pipeline(
         steps=[
@@ -148,11 +174,7 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
         ]
     )
 
-    logger.info(
-        "Pipeline built — LightGBM n_estimators=%d, learning_rate=%.3f.",
-        lgbm_params.get("n_estimators", "?"),
-        lgbm_params.get("learning_rate", "?"),
-    )
+    logger.info("Pipeline built — %s initialized.", classifier_class.__name__)
 
     return pipeline
 

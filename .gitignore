@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+.coverage
 *.py[cod]
 *.pyo
 .venv/
@@ -56,4 +57,10 @@ Thumbs.db
 
 # DVC
 /tmp
-\n# Generated notebook reports\nreports/*.png\nreports/*.html
+
+# CatBoost
+catboost_info/
+
+# Generated notebook reports
+reports/*.png
+reports/*.html

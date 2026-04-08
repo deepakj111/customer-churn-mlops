@@ -82,8 +82,6 @@ class TrainingConfig:
     cv_folds: int
     cv_scoring: str
     experiment_name: str
-    fn_cost: float
-    fp_cost: float
 
 
 @dataclass
@@ -127,7 +125,7 @@ class ConfigLoader:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
         logger.debug("Loaded config file: %s", path)
-        return data
+        return dict(data) if data is not None else {}
 
     @property
     def model(self) -> ModelConfig:
@@ -181,12 +179,27 @@ def get_config(config_dir: str = "configs") -> ConfigLoader:
     """
     Return the singleton ConfigLoader instance.
 
+    If called with a different config_dir than the cached instance,
+    the singleton is replaced with a new loader pointing to the
+    requested directory.
+
     Usage:
         from src.utils.config_loader import get_config
         cfg = get_config()
         target = cfg.features.target_column
     """
     global _config_loader
-    if _config_loader is None:
+    if _config_loader is None or str(_config_loader._config_dir) != config_dir:
         _config_loader = ConfigLoader(config_dir=config_dir)
     return _config_loader
+
+
+def reset_config() -> None:
+    """
+    Reset the singleton ConfigLoader — primarily for test isolation.
+
+    Call this in a pytest fixture (e.g. conftest.py autouse fixture)
+    to guarantee each test starts with a fresh config state.
+    """
+    global _config_loader
+    _config_loader = None
