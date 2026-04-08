@@ -21,8 +21,10 @@
 # 4. What interaction effects are worth engineering as explicit features?
 # 5. Are there any data quality surprises beyond the known TotalCharges issue?
 
+
 # %% [markdown]
 # ## 0. Setup
+
 
 # %%
 import warnings
@@ -39,7 +41,6 @@ from pathlib import Path
 # but all data paths are relative to the project root.
 # This block walks up until it finds pyproject.toml (the project root
 # marker) and sets that as the working directory.
-# This is the standard pattern for notebooks in subdirectories.
 # ------------------------------------------------------------------
 def find_project_root(marker: str = "pyproject.toml") -> Path:
     current = Path.cwd()
@@ -56,6 +57,9 @@ PROJECT_ROOT = find_project_root()
 os.chdir(PROJECT_ROOT)
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Create reports directory if it doesn't exist
+Path("reports").mkdir(exist_ok=True)
+
 print(f"Project root : {PROJECT_ROOT}")
 print(f"Working dir  : {Path.cwd()}")
 
@@ -67,7 +71,7 @@ import seaborn as sns
 from scipy import stats
 
 from src.data.ingest import load_for_training
-from src.data.preprocess import preprocess, split_features_target
+from src.data.preprocess import run_preprocessing
 from src.data.validate import fix_total_charges, validate_raw_data
 from src.utils.logging import get_logger
 
@@ -88,6 +92,7 @@ BINARY_COLORS = ["#4f98a3", "#a13544"]
 
 print("Setup complete.")
 
+
 # %% [markdown]
 # ## 1. Load & Validate Data
 #
@@ -95,20 +100,22 @@ print("Setup complete.")
 # If validation fails here, it will fail in the pipeline too.
 # Discovering that in a notebook is far cheaper than discovering it in CI.
 
+
 # %%
 raw_df = load_for_training()
 validated_df = validate_raw_data(raw_df)
-clean_df = preprocess(validated_df)
-X, y = split_features_target(clean_df)
+X, y = run_preprocessing(validated_df)
 
 print(f"Raw shape         : {raw_df.shape}")
 print(f"Validated shape   : {validated_df.shape}")
-print(f"Post-preprocess   : {clean_df.shape}")
 print(f"Feature matrix X  : {X.shape}")
 print(f"Target vector y   : {y.shape}")
+print(f"Churn rate        : {y.mean():.1%}")
+
 
 # %% [markdown]
 # ## 2. Dataset Overview
+
 
 # %%
 print("=" * 55)
@@ -124,9 +131,11 @@ info_df = pd.DataFrame(
 ).sort_values("dtype")
 print(info_df.to_string())
 
+
 # %%
 print("\nDescriptive statistics for numeric columns:")
 raw_df[["tenure", "MonthlyCharges", "TotalCharges"]].describe().round(2)
+
 
 # %% [markdown]
 # ### Key observation
@@ -134,6 +143,7 @@ raw_df[["tenure", "MonthlyCharges", "TotalCharges"]].describe().round(2)
 # 11 blank-string rows for `tenure == 0` customers. Our `fix_total_charges()`
 # function handles this before validation. This is the **only data quality
 # issue** in this dataset — everything else is clean.
+
 
 # %%
 # Confirm the known TotalCharges blank rows
@@ -143,11 +153,13 @@ print(f"All have tenure == 0    : {(raw_df[blank_mask]['tenure'] == 0).all()}")
 print("\nThese rows (first 3):")
 raw_df[blank_mask][["customerID", "tenure", "MonthlyCharges", "TotalCharges"]].head(3)
 
+
 # %% [markdown]
 # ## 3. Target Variable — Class Imbalance Analysis
 #
 # **Business question**: How many customers churned, and what does that
 # represent in lost revenue?
+
 
 # %%
 churn_counts = raw_df["Churn"].value_counts()
@@ -156,6 +168,7 @@ churn_rate = churn_counts["Yes"] / len(raw_df)
 print(f"Total customers    : {len(raw_df):,}")
 print(f"Churned (Yes)      : {churn_counts['Yes']:,}  ({churn_rate:.1%})")
 print(f"Retained (No)      : {churn_counts['No']:,}  ({1 - churn_rate:.1%})")
+
 
 # %%
 # Business revenue impact estimate
@@ -170,6 +183,7 @@ print(
     f"\nIf we retain just 10% of churners: "
     f"${churned_revenue_annual * 0.10:,.0f} / year saved"
 )
+
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -204,8 +218,9 @@ plt.suptitle(
     y=1.02,
 )
 plt.tight_layout()
-plt.savefig("reports//eda_01_churn_distribution.png", bbox_inches="tight")
+plt.savefig("reports/eda_01_churn_distribution.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Finding**: 26.5% churn rate. Not severely imbalanced but requires care.
@@ -217,11 +232,13 @@ plt.show()
 # Even retaining 10% of predicted churners saves ~$145K/year — more than
 # enough to justify the cost of building and maintaining this system.
 
+
 # %% [markdown]
 # ## 4. Contract Type — The Single Strongest Predictor
 #
 # **Business question**: Does contract length predict churn?
 # This is the most important business insight in the dataset.
+
 
 # %%
 contract_churn = (
@@ -235,6 +252,7 @@ contract_churn = contract_churn.sort_values("Yes", ascending=False)
 
 print("Churn rate by contract type:")
 print(contract_churn.to_string(index=False))
+
 
 # %%
 fig, ax = plt.subplots(figsize=(9, 4))
@@ -268,8 +286,9 @@ for bar in bars_yes:
     )
 
 plt.tight_layout()
-plt.savefig("reports//eda_02_churn_by_contract.png", bbox_inches="tight")
+plt.savefig("reports/eda_02_churn_by_contract.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Finding**: Month-to-month customers churn at **42.7%** vs 11.3% (one year)
@@ -278,8 +297,10 @@ plt.show()
 # **Feature engineering decision**: Create `is_month_to_month` binary flag.
 # This concentrates the signal into a single highly predictive boolean.
 
+
 # %% [markdown]
 # ## 5. Tenure — The Time Dimension
+
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(13, 4))
@@ -301,15 +322,15 @@ axes[0].set_title("Tenure Distribution by Churn Status", fontweight="bold")
 axes[0].legend(title="Churn")
 
 # Churn rate by tenure bucket
-df_temp = raw_df.copy()
-df_temp["tenure_bin"] = pd.cut(
-    df_temp["tenure"],
+df_tenure = raw_df.copy()
+df_tenure["tenure_bin"] = pd.cut(
+    df_tenure["tenure"],
     bins=[0, 6, 12, 24, 48, 72],
     labels=["0-6m", "7-12m", "13-24m", "25-48m", "49-72m"],
     include_lowest=True,
 )
 churn_by_tenure = (
-    df_temp.groupby("tenure_bin", observed=True)["Churn"]
+    df_tenure.groupby("tenure_bin", observed=True)["Churn"]
     .apply(lambda x: (x == "Yes").mean())
     .reset_index()
 )
@@ -326,8 +347,9 @@ for i, row in churn_by_tenure.iterrows():
     )
 
 plt.tight_layout()
-plt.savefig("reports//eda_03_tenure_analysis.png", bbox_inches="tight")
+plt.savefig("reports/eda_03_tenure_analysis.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Finding**: Churn is overwhelmingly a **new-customer problem**.
@@ -338,8 +360,10 @@ plt.show()
 # - Create `tenure_group` ordinal feature (0-6m, 7-12m, 13-24m, 25-48m, 49+m)
 # - `tenure` raw value is also kept — it's a strong continuous predictor
 
+
 # %% [markdown]
 # ## 6. Monthly Charges — The Price Signal
+
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(13, 4))
@@ -370,7 +394,7 @@ raw_df.boxplot(
 axes[1].set_xlabel("Churn")
 axes[1].set_ylabel("Monthly Charges ($)")
 axes[1].set_title("Monthly Charges Distribution", fontweight="bold")
-plt.suptitle("")  # remove the auto-generated suptitle from boxplot
+plt.suptitle("")  # suppress auto-generated suptitle from boxplot
 
 churned_median = raw_df[raw_df["Churn"] == "Yes"]["MonthlyCharges"].median()
 retained_median = raw_df[raw_df["Churn"] == "No"]["MonthlyCharges"].median()
@@ -386,8 +410,9 @@ print(
 )
 
 plt.tight_layout()
-plt.savefig("reports//eda_04_monthly_charges.png", bbox_inches="tight")
+plt.savefig("reports/eda_04_monthly_charges.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Finding**: Churned customers pay significantly higher monthly charges
@@ -398,8 +423,10 @@ plt.show()
 # **Feature engineering decision**: Create `charge_to_tenure_ratio` —
 # high charges + low tenure = highest risk segment.
 
+
 # %% [markdown]
 # ## 7. Internet Service — The Infrastructure Signal
+
 
 # %%
 internet_churn = (
@@ -410,6 +437,7 @@ internet_churn = (
 )
 print("Churn rate by internet service type:")
 print(internet_churn.round(3))
+
 
 # %%
 fig, ax = plt.subplots(figsize=(8, 4))
@@ -422,14 +450,16 @@ ax.xaxis.set_major_formatter(mticker.PercentFormatter(xmax=1))
 for i, v in enumerate(internet_churn["Yes"].sort_values()):
     ax.text(v + 0.003, i, f"{v:.1%}", va="center", fontsize=10)
 plt.tight_layout()
-plt.savefig("reports//eda_05_internet_service_churn.png", bbox_inches="tight")
+plt.savefig("reports/eda_05_internet_service_churn.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Finding**: Fiber optic customers churn at **41.9%** — nearly 3x the rate
-# of DSL customers (18.9%) and 10x customers with no internet (7.4%).
+# of DSL customers (19%) and 10x customers with no internet (7.4%).
 # This signals a **service quality or value perception problem** with the
 # Fiber product, not just a price sensitivity issue.
+
 
 # %% [markdown]
 # ## 8. Service Adoption — The Stickiness Signal
@@ -437,24 +467,9 @@ plt.show()
 # **Hypothesis**: Customers who use more services are more "sticky" because
 # switching costs are higher (they'd lose multiple services at once).
 
+
 # %%
-service_cols = [
-    "PhoneService",
-    "MultipleLines",
-    "InternetService",
-    "OnlineSecurity",
-    "OnlineBackup",
-    "DeviceProtection",
-    "TechSupport",
-    "StreamingTV",
-    "StreamingMovies",
-]
-
-df_temp = raw_df.copy()
-
-
-# Count "active" services: Yes or has internet/phone (not "No X service")
-def count_services(row):
+def count_services(row: pd.Series) -> int:
     count = 0
     if row["PhoneService"] == "Yes":
         count += 1
@@ -475,10 +490,11 @@ def count_services(row):
     return count
 
 
-df_temp["service_count"] = df_temp.apply(count_services, axis=1)
+df_services = raw_df.copy()
+df_services["service_count"] = df_services.apply(count_services, axis=1)
 
 service_churn = (
-    df_temp.groupby("service_count")["Churn"]
+    df_services.groupby("service_count")["Churn"]
     .apply(lambda x: (x == "Yes").mean())
     .reset_index()
 )
@@ -498,28 +514,32 @@ ax.set_title("Churn Rate by Number of Active Services", fontweight="bold")
 ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1))
 ax.set_xticks(service_churn["service_count"])
 plt.tight_layout()
-plt.savefig("reports//eda_06_service_adoption_churn.png", bbox_inches="tight")
+plt.savefig("reports/eda_06_service_adoption_churn.png", bbox_inches="tight")
 plt.show()
 
 print("Churn rate by service count:")
 print(service_churn.to_string(index=False))
+
 
 # %% [markdown]
 # **Finding**: Churn rate is **not monotonically decreasing** with service count
 # — customers with 3 services actually show higher churn than those with 1.
 # The relationship is non-linear. This means we can't use raw service count
 # as-is — the model needs to learn the non-linearity, OR we engineer
-# `has_protection_bundle` (TechSupport + OnlineSecurity + DeviceProtection)
-# as a separate feature since those specific services drive retention.
+# `has_protection_bundle` (TechSupport + OnlineSecurity) as a separate feature
+# since those specific services drive retention, unlike streaming add-ons.
 #
 # **Feature engineering decisions**:
-# - `service_adoption_count` (raw count)
+# - `service_adoption_count` (raw count as a stickiness proxy)
 # - `has_protection_bundle` = TechSupport == Yes AND OnlineSecurity == Yes
+# - `avg_charge_per_service` = MonthlyCharges / (service_adoption_count + 1)
+
 
 # %% [markdown]
 # ## 9. Key Interaction: Contract × Internet Service
 #
 # The most dangerous customer segment: Fiber optic + month-to-month.
+
 
 # %%
 interaction_df = (
@@ -543,16 +563,19 @@ ax.set_title("Churn Rate Heatmap: Contract Type × Internet Service", fontweight
 ax.set_xlabel("Internet Service")
 ax.set_ylabel("Contract Type")
 plt.tight_layout()
-plt.savefig("reports//eda_07_contract_internet_heatmap.png", bbox_inches="tight")
+plt.savefig("reports/eda_07_contract_internet_heatmap.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Finding**: The extreme cell is **Month-to-month + Fiber optic = 52.6% churn**.
 # More than half of customers in this combination will leave.
 # This is the primary retention target segment for business campaigns.
 
+
 # %% [markdown]
 # ## 10. Categorical Features — Churn Rate Comparison
+
 
 # %%
 cat_features = [
@@ -584,8 +607,9 @@ for i, col in enumerate(cat_features):
 
 plt.suptitle("Churn Rate by Categorical Feature", fontweight="bold", fontsize=13)
 plt.tight_layout()
-plt.savefig("reports//eda_08_categorical_churn_rates.png", bbox_inches="tight")
+plt.savefig("reports/eda_08_categorical_churn_rates.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Key findings from categorical analysis**:
@@ -600,23 +624,21 @@ plt.show()
 #   payment method. Mailed check shows only 19.1%. This likely proxies
 #   for engagement level — electronic check requires the least commitment.
 
+
 # %% [markdown]
 # ## 11. Correlation & Feature Relationships
 
+
 # %%
-# Numeric correlation with binary target
 df_numeric = fix_total_charges(raw_df.copy())
 df_numeric["Churn_int"] = (df_numeric["Churn"] == "Yes").astype(int)
-
-correlations = df_numeric[
-    ["tenure", "MonthlyCharges", "TotalCharges", "Churn_int"]
-].corr()
 
 print("Point-biserial correlations with Churn:")
 for col in ["tenure", "MonthlyCharges", "TotalCharges"]:
     corr_val, p_val = stats.pointbiserialr(df_numeric["Churn_int"], df_numeric[col])
     significance = "***" if p_val < 0.001 else ("**" if p_val < 0.01 else "*")
     print(f"  {col:<20}: r = {corr_val:+.4f}  p={p_val:.2e} {significance}")
+
 
 # %%
 fig, ax = plt.subplots(figsize=(6, 5))
@@ -637,8 +659,9 @@ sns.heatmap(
 )
 ax.set_title("Numeric Feature Correlation Matrix", fontweight="bold")
 plt.tight_layout()
-plt.savefig("reports//eda_09_correlation_matrix.png", bbox_inches="tight")
+plt.savefig("reports/eda_09_correlation_matrix.png", bbox_inches="tight")
 plt.show()
+
 
 # %% [markdown]
 # **Finding**: `tenure` has a strong negative correlation with churn (r = -0.35):
@@ -649,11 +672,12 @@ plt.show()
 # TotalCharges is largely redundant with tenure. We will include it but
 # expect low independent feature importance after controlling for tenure.
 
+
 # %% [markdown]
 # ## 12. The High-Risk Segment Deep Dive
 
+
 # %%
-# Define the highest-risk segment based on EDA findings
 high_risk_mask = (
     (raw_df["Contract"] == "Month-to-month")
     & (raw_df["InternetService"] == "Fiber optic")
@@ -678,10 +702,22 @@ est_monthly_revenue_at_risk = segment_df[segment_df["Churn"] == "Yes"][
 print(f"\nMonthly revenue at risk in this segment: ${est_monthly_revenue_at_risk:,.0f}")
 
 # %% [markdown]
+# **Finding**: The high-risk segment — Month-to-month + Fiber optic + tenure ≤ 12 months —
+# contains **916 customers (13% of the base)** who churn at **70.2%**, which is
+# **2.65x the dataset average**. This segment generates $53,178/month in revenue at risk.
+
+# Note the distinction from Section 9: the full M2M + Fiber optic heatmap cell shows 52.6%
+# churn across all tenure lengths. Adding the tenure ≤ 12 months filter concentrates the
+# risk further to 70.2% — these are brand-new, high-spend, uncommitted customers.
+
+# %% [markdown]
 # ## 13. Summary of Feature Engineering Decisions
 #
 # This section is the direct output of this notebook — the instructions
-# that `src/features/feature_store.py` will implement.
+# that `src/features/feature_store.py` implements for Phase 1 (original 7 features).
+# The Phase 2 features (21 additional) are explored and validated in
+# `notebooks/02_feature_engineering_experiments.py`.
+
 
 # %%
 feature_decisions = {
@@ -695,10 +731,10 @@ feature_decisions = {
         "PaperlessBilling   — 33.6% vs 16.3% — double the rate",
         "TechSupport et al  — Service add-ons with retention signal",
     ],
-    "ENGINEER NEW": [
+    "ENGINEER NEW (Phase 1 — implemented in feature_store.py)": [
         "tenure_group           — Binned tenure: 0-6m, 7-12m, 13-24m, 25-48m, 49+m",
         "is_month_to_month      — Binary flag for month-to-month contract",
-        "service_adoption_count — Count of active subscribed services",
+        "service_adoption_count — Count of active subscribed services (0-9)",
         "has_protection_bundle  — TechSupport==Yes AND OnlineSecurity==Yes",
         "charge_to_tenure_ratio — MonthlyCharges / (tenure + 1)",
         "is_fiber_optic         — Binary flag for Fiber optic internet service",
@@ -722,12 +758,13 @@ for category, features in feature_decisions.items():
     for feat in features:
         print(f"  • {feat}")
 
+
 # %% [markdown]
 # ## 14. Business Recommendations Summary
 #
 # | Priority | Segment | Action | Expected Lift |
 # |---|---|---|---|
-# | 🔴 CRITICAL | M2M + Fiber + tenure ≤ 12m | Personal outreach + discounted annual contract | 2.5x lift |
+# | 🔴 CRITICAL | M2M + Fiber + tenure ≤ 12m | Personal outreach + discounted annual contract | 2.65x lift |
 # | 🟠 HIGH | M2M + MonthlyCharges > $80 | Proactive billing review + loyalty discount | 1.8x lift |
 # | 🟡 MEDIUM | Electronic check + M2M | Auto-pay incentive ($10 discount) | 1.4x lift |
 # | 🟢 MONITOR | New customers (0-6m tenure) | Onboarding journey improvement | Long-term |
@@ -738,8 +775,20 @@ for category, features in feature_decisions.items():
 # estimated $64.76 average monthly charge is reached within ~3 months
 # of model deployment.
 
+
 # %%
 print("EDA complete. Reports saved to reports/")
-print(f"Total figures generated: 9")
-print("\nNext step: src/features/feature_store.py")
-print("Implement all feature engineering decisions documented in Section 13.")
+print("Total figures generated: 9")
+print("  eda_01_churn_distribution.png")
+print("  eda_02_churn_by_contract.png")
+print("  eda_03_tenure_analysis.png")
+print("  eda_04_monthly_charges.png")
+print("  eda_05_internet_service_churn.png")
+print("  eda_06_service_adoption_churn.png")
+print("  eda_07_contract_internet_heatmap.png")
+print("  eda_08_categorical_churn_rates.png")
+print("  eda_09_correlation_matrix.png")
+print()
+print("Next step: notebooks/02_feature_engineering_experiments.py")
+print("  Phase 1 features implemented in: src/features/feature_store.py")
+print("  Phase 2 features (21 new) explored in notebook 02.")

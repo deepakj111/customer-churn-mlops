@@ -11,6 +11,8 @@ repo_code.py
 all_python_files.txt
 repo_code.txt
 
+.ipynb
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_metadata
