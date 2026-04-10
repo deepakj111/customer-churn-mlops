@@ -33,8 +33,8 @@ htmlcov/
 .coverage
 tests/
 
-# Reports (rebuilt inside container or mounted as volumes)
-reports/
+# Reports (needed by the Streamlit dashboard to show data visualisations)
+# reports/
 
 # Docker (don't recursively copy our own Dockerfiles)
 docker/
