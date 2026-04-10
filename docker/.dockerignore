@@ -1,0 +1,58 @@
+# ============================================================================
+# .dockerignore — keep Docker build context small and secure.
+#
+# Everything listed here is excluded from COPY . commands in Dockerfiles.
+# This dramatically speeds up builds by excluding Git history (~100MB+),
+# the virtualenv (~500MB+), notebook outputs, and test artifacts.
+# ============================================================================
+
+# Version control
+.git
+.gitignore
+.dvc
+.dvcignore
+
+# Virtual environments (we install fresh inside the container)
+.venv
+__pycache__
+*.pyc
+*.pyo
+.mypy_cache
+.pytest_cache
+
+# IDE
+.vscode
+.idea
+
+# Notebooks (not needed in production images)
+notebooks/
+*.ipynb
+
+# Test artifacts and coverage
+htmlcov/
+.coverage
+tests/
+
+# Reports (rebuilt inside container or mounted as volumes)
+reports/
+
+# Docker (don't recursively copy our own Dockerfiles)
+docker/
+
+# Temp files
+*.egg-info
+dist/
+build/
+/tmp
+
+# CatBoost training artifacts
+catboost_info/
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Environment files (secrets should be injected via Docker secrets or env vars)
+.env
+.env.*

@@ -1,6 +1,6 @@
 # Makefile — put this at the project root
 
-.PHONY: help setup install format lint test train serve docker-build clean
+.PHONY: help setup install format lint test test-unit test-integration train serve dashboard drift-report save-reference docker-build docker-up docker-down clean
 
 help:   ## Show this help menu
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -14,8 +14,8 @@ install:   ## Install all dependencies
 	poetry install
 
 format:   ## Auto-format code with black + isort
-	poetry run black src/ tests/ scripts/ pipelines/
-	poetry run isort src/ tests/ scripts/ pipelines/
+	poetry run black src/ tests/ scripts/ dashboards/
+	poetry run isort src/ tests/ scripts/ dashboards/
 
 lint:   ## Lint code with flake8 + mypy
 	poetry run flake8 src/ tests/ scripts/
@@ -41,6 +41,9 @@ dashboard:   ## Launch Streamlit dashboard
 
 drift-report:   ## Generate latest drift monitoring report
 	poetry run python scripts/generate_drift_report.py
+
+save-reference:   ## Save training data as drift reference snapshot
+	poetry run python scripts/save_reference_data.py
 
 docker-build:   ## Build all Docker images
 	docker compose -f docker/docker-compose.yml build

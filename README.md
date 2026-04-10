@@ -1,175 +1,571 @@
-# 🔭 Customer Churn Predictor: End-to-End MLOps Pipeline
+# 🔭 Customer Churn Predictor — End-to-End MLOps Pipeline
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![MLflow](https://img.shields.io/badge/MLflow-2.10+-blue.svg?logo=mlflow)](https://mlflow.org/)
-[![DVC](https://img.shields.io/badge/DVC-Data%20Versioning-13c2c2.svg?logo=data-version-control)](https://dvc.org/)
-[![Pandera](https://img.shields.io/badge/Pandera-Validation-ff69b4.svg)](https://pandera.readthedocs.io/)
-[![pytest](https://img.shields.io/badge/pytest-Passing-success.svg?logo=pytest)](https://docs.pytest.org/en/latest/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-
-A production-grade, end-to-end Machine Learning Operations (MLOps) pipeline built to predict customer churn using the Telco Customer Churn dataset.
-
-This project goes beyond standard machine learning objectives by explicitly optimizing for **real business value**. By integrating a **cost-matrix threshold optimization** mechanism, it balances the financial trade-off between the cost of false positives (unnecessary retention costs) and false negatives (lost customer revenue). The architecture is designed with **production reliability** at its core, ensuring seamless transitions from experimentation to deployment while preventing training-serving skew.
+[![CI Pipeline](https://github.com/deepakjangra/customer-churn-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/deepakjangra/customer-churn-mlops/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Tests](https://img.shields.io/badge/Tests-281%20Passed-brightgreen.svg?logo=pytest)](https://docs.pytest.org/)
+[![Coverage](https://img.shields.io/badge/Coverage-75%25-yellowgreen.svg)](htmlcov/index.html)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![MLflow](https://img.shields.io/badge/MLflow-3.10+-0194E2.svg?logo=mlflow&logoColor=white)](https://mlflow.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![DVC](https://img.shields.io/badge/DVC-Data%20Versioning-13ADC7.svg?logo=dvc&logoColor=white)](https://dvc.org/)
+[![Code style: black](https://img.shields.io/badge/Code%20Style-Black-000000.svg)](https://github.com/psf/black)
 
 ---
 
-## 🏗️ Architecture & Core Features
+A **production-grade Machine Learning Operations pipeline** that predicts customer churn using the [Telco Customer Churn](https://www.kaggle.com/blastchar/telco-customer-churn) dataset. This project demonstrates the **complete ML lifecycle** — from exploratory analysis to containerized deployment — following industry best practices in MLOps, software engineering, and DevOps.
 
-### 1. Robust Data Pipeline & Feature Store
-- **Data Validation (`pandera`)**: Strict schema enforcement guarantees data integrity at both the raw ingestion step and API inference boundaries.
-- **Stateless Engineering (`sklearn.Pipeline`)**: 28 richly engineered behavioral features compiled into a stateless `FunctionTransformer`. This enforces identical transformations between training and inference environments, completely eliminating training-serving skew.
-- **5-Stage Feature Selection**: A rigorous consensus pipeline (Variance, Correlation, Mutual Information, Random Forest Importance, and Permutation Importance) extracts only statistically significant features.
+> **Why this project matters:** Reducing customer churn by even 5% can increase profits by 25–95% ([Harvard Business Review](https://hbr.org/2014/10/the-value-of-keeping-the-right-customers)). This pipeline doesn't just predict churn — it optimizes for **real dollar savings** using asymmetric cost-matrix threshold tuning, making predictions directly actionable for business teams.
 
-### 2. Business-Optimized Model Training
-- **Algorithm**: `LightGBM` wrapped tightly within an `sklearn.Pipeline`.
-- **3-Way Data Split**: Rigorous `Train/Validation/Test` stratifications to prevent data leakage during hyperparameter tuning and threshold optimization.
-- **Asymmetric Cost Matrix**: Instead of defaulting to a 0.5 decision threshold, the pipeline simulates financial impact (e.g. $500 cost per missed churn vs $20 cost per false alarm intervention) to dynamically locate the **Cost-Optimal Threshold**.
+---
 
-### 3. Production Serving Layer
-- **Real-Time API (`FastAPI`)**: Exposes `/predict` and `/predict/batch` endpoints, complete with Pydantic v2 response schemas and interactive OpenAPI `/docs`.
-- **Dual-Mode Thread-Safe Loader**: The API operates smoothly via MLflow Model Registry fallback chains or self-trained local caching during local development.
-- **Observability**: Implements `X-Request-ID` middleware to track single and batch prediction requests through logs.
+## 📋 Table of Contents
 
-### 4. MLOps Integrations
-- **MLflow Tracking & Registry**: Centrally logs metrics, parameters, and serialized pipeline artifacts for strict reproducibility.
-- **DVC (Data Version Control)**: Decouples dataset versioning from source control.
-- **Config-Driven Architecture**: YAML to Python `dataclass` singletons ensure type-safe environment adjustments without touching application code.
-- **Extensive Testing**: 240+ passing unit and integration tests enforcing schemas, structural constraints, and API flow using HTTPX `TestClient`.
+- [Key Features](#-key-features)
+- [Architecture Overview](#-architecture-overview)
+- [Project Structure](#-project-structure)
+- [Quick Start](#-quick-start)
+- [Usage Guide](#-usage-guide)
+- [API Reference](#-api-reference)
+- [Docker Deployment](#-docker-deployment)
+- [Testing](#-testing)
+- [Configuration](#-configuration)
+- [MLOps Practices](#-mlops-practices)
+- [License](#-license)
+
+---
+
+## ✨ Key Features
+
+### 🧠 Machine Learning
+- **28 engineered features** across 6 groups (demographic, billing, service depth, contract, interaction, composite)
+- **5-stage consensus feature selection** (Variance → Correlation → Mutual Information → Random Forest → Permutation Importance)
+- **LightGBM** with Optuna-tuned hyperparameters and class-imbalance handling via `scale_pos_weight`
+- **Cost-matrix threshold optimization** — minimizes total business cost ($500/missed churner vs $20/false alarm)
+- **3-way stratified data split** (Train 70% / Validation 10% / Test 20%) to prevent data leakage
+
+### 🚀 Production Serving
+- **FastAPI REST API** with single and batch prediction endpoints, Pydantic v2 validation, and OpenAPI docs
+- **Thread-safe lazy model loading** with automatic fallback chain (MLflow Registry → Local Training)
+- **Request tracing** via `X-Request-ID` UUID header on every response
+- **Risk tier classification** (High / Medium / Low) with actionable business recommendations
+
+### 📊 Monitoring & Observability
+- **Data drift detection** using PSI (numerical) and Chi-squared (categorical) statistical tests
+- **Prediction drift tracking** via relative mean shift against training baseline
+- **Config-driven thresholds** — all monitoring parameters tunable from YAML without code changes
+
+### 🐳 DevOps & Infrastructure
+- **Multi-stage Docker builds** — optimized for size (slim Python) and security (non-root user)
+- **Docker Compose** — one-command local stack (API + Dashboard + MLflow)
+- **GitHub Actions CI/CD** — automated linting, testing, and Docker image validation on every push
+- **DVC** for dataset versioning, **Poetry** for dependency management
+
+### 🧪 Quality Assurance
+- **281 tests** (unit + integration) with **75% code coverage**
+- **Pandera schema validation** at ingestion and inference boundaries
+- **Pre-commit hooks** (Black, isort, Flake8) enforce consistent code style
+- **Type-safe configuration** — YAML configs loaded into Python dataclasses
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+                         ┌─────────────────────────────────────────┐
+                         │            GitHub Actions CI/CD         │
+                         │   Lint → Test (281) → Docker Build      │
+                         └───────────────┬─────────────────────────┘
+                                         │
+    ┌────────────┐    ┌──────────┐    ┌──┴───────┐    ┌──────────────┐
+    │  Raw Data  │───▶│ Validate │───▶│ Feature  │───▶│   Train +    │
+    │  (DVC)     │    │ (Pandera)│    │  Store   │    │  Optimize    │
+    └────────────┘    └──────────┘    │(28 feats)│    │  (MLflow)    │
+                                      └──────────┘    └──────┬───────┘
+                                                             │
+                                                    ┌────────┴────────┐
+                                                    │  sklearn.Pipeline│
+                                                    │ (FeatEng→Prep→  │
+                                                    │  Model)         │
+                                                    └────────┬────────┘
+                                                             │
+         ┌─────────────┐    ┌──────────────┐    ┌────────────┴────────┐
+         │  Streamlit   │◀──│  FastAPI      │◀──│  Model Loader       │
+         │  Dashboard   │   │  /predict     │   │  (MLflow→Local      │
+         │  (port 8501) │   │  (port 8000)  │   │   fallback)         │
+         └─────────────┘    └──────────────┘    └─────────────────────┘
+                                    │
+                            ┌───────┴───────┐
+                            │  Drift Monitor│
+                            │  (PSI, χ²)    │
+                            └───────────────┘
+```
+
+**Key Design Decisions:**
+1. **Training-Serving Parity** — The `sklearn.Pipeline` encapsulates feature engineering, preprocessing, and model inference into a single serializable object. Training-serving skew is structurally impossible.
+2. **Stateless Feature Engineering** — All 28 features are computed via pure functions, guaranteeing identical behavior in training and inference.
+3. **Cost-Sensitive, Not Accuracy-Driven** — The decision threshold is optimized using a business cost matrix, not the default 0.5 cutoff.
 
 ---
 
 ## 📂 Project Structure
 
-```text
+```
 customer-churn-mlops/
-├── configs/                   # Type-safe YAML configurations (model, features, training)
+│
+├── .github/workflows/         # CI/CD pipeline (lint, test, Docker build)
+│   └── ci.yml
+│
+├── configs/                   # All configuration (YAML → Python dataclasses)
+│   ├── feature_config.yaml    #   Feature names, target column, engineered features
+│   ├── model_config.yaml      #   Algorithm, hyperparameters, cost matrix, performance gates
+│   ├── monitoring_config.yaml #   Drift thresholds (PSI, chi-squared, prediction drift)
+│   └── training_config.yaml   #   Split ratios, CV folds, experiment name
+│
+├── dashboards/                # Streamlit monitoring & prediction dashboard
+│   └── streamlit_app.py
+│
 ├── data/
-│   ├── raw/                   # DVC-tracked raw datasets
-│   └── processed/             # Interim/cleaned datasets (ignored from git)
-├── notebooks/                 # Exploratory Data Analysis & Tuning experiments
-├── src/
-│   ├── data/                  # Ingestion, Pandera validation, and leakage-free splitting
-│   ├── features/              # Feature engineering functions & 5-stage selector
-│   ├── models/                # Training, Pipeline wrappers, Evaluation, Threshold tuning
-│   ├── serving/               # FastAPI layer: api.py, schemas.py, model_loader.py
-│   └── utils/                 # Singleton config loader and deterministic logging
-├── tests/
-│   ├── unit/                  # 200+ unit tests covering validation, components, thresholds
-│   └── integration/           # Integration tests targeting the FastAPI endpoints
-├── pyproject.toml             # Poetry dependencies, pytest, formatting, and lint configs
-└── Makefile                   # Command aliases for testing, linting, and serving
+│   ├── raw/                   # DVC-tracked raw dataset (Telco CSV)
+│   ├── processed/             # Intermediate artifacts (tuning results, etc.)
+│   └── reference/             # Drift monitoring reference snapshots (Parquet)
+│
+├── docker/                    # Containerization
+│   ├── Dockerfile             #   Multi-stage build for FastAPI API
+│   ├── Dockerfile.streamlit   #   Dashboard container
+│   ├── docker-compose.yml     #   Full local stack (API + Dashboard + MLflow)
+│   └── .dockerignore
+│
+├── notebooks/                 # Exploratory analysis & experiments
+│   ├── 01_eda_and_business_analysis.py
+│   ├── 02_feature_engineering_experiments.py
+│   ├── 03a_algorithm_scan.py
+│   ├── 03b_hyperparameter_tuning.py
+│   └── 03c_champion_evaluation.py
+│
+├── reports/                   # Auto-generated plots (EDA, feature importance, etc.)
+│
+├── scripts/                   # CLI utilities
+│   ├── save_reference_data.py #   Save training data for drift monitoring
+│   └── generate_drift_report.py #  Generate drift analysis report
+│
+├── src/                       # Production source code
+│   ├── data/                  #   Ingestion, validation (Pandera), preprocessing
+│   │   ├── ingest.py
+│   │   ├── validate.py
+│   │   └── preprocess.py
+│   ├── features/              #   Feature engineering & multi-stage selection
+│   │   ├── feature_store.py
+│   │   └── feature_selector.py
+│   ├── models/                #   Training, evaluation, pipeline factory, threshold tuning
+│   │   ├── train.py
+│   │   ├── evaluate.py
+│   │   ├── pipeline.py
+│   │   └── threshold.py
+│   ├── monitoring/            #   Data drift detection & reference management
+│   │   ├── drift_detector.py
+│   │   └── reference_builder.py
+│   ├── serving/               #   FastAPI prediction API
+│   │   ├── api.py
+│   │   ├── schemas.py
+│   │   └── model_loader.py
+│   └── utils/                 #   Configuration loader & structured logging
+│       ├── config_loader.py
+│       └── logging.py
+│
+├── tests/                     # 281 tests (unit + integration + data validation)
+│   ├── conftest.py
+│   ├── unit/
+│   ├── integration/
+│   └── data_tests/
+│
+├── main.py                    # Training pipeline entry point
+├── pyproject.toml             # Poetry deps, pytest, Black, isort, Flake8, mypy config
+├── Makefile                   # Developer workflow automation
+├── .pre-commit-config.yaml    # Git hooks for code quality
+└── .env.example               # Environment variable template
 ```
 
 ---
 
-## 🚀 Setup & Installation
+## 🚀 Quick Start
 
-**Prerequisites:** Python 3.11+, Poetry, and Make.
+### Prerequisites
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/customer-churn-mlops.tgit
-   cd customer-churn-mlops
-   ```
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Python | 3.11+ | Runtime |
+| Poetry | 2.x | Dependency management |
+| Docker (optional) | 24+ | Container deployment |
+| Make (optional) | Any | Workflow automation |
 
-2. **Install dependencies:**
-   ```bash
-   poetry install
-   ```
+### Installation
 
-3. **Environment Setup (Optional MLflow configuration):**
-   Copy `.env.example` to `.env` and configure your credentials if connecting to a remote MLflow tracking server (e.g., DagsHub). Otherwise, default local tracking will be used.
-   ```bash
-   cp .env.example .env
-   ```
-
----
-
-## 💻 Usage
-
-We use a `Makefile` for automated task runners. Ensure you are running commands inside the active Poetry shell (`poetry shell`) or prepend with `poetry run`.
-
-### 1. Data Replication & Pipeline setup
-Pull the version-controlled datasets to ensure you are experimenting on identical baseline distributions:
 ```bash
+# 1. Clone the repository
+git clone https://github.com/deepakjangra/customer-churn-mlops.git
+cd customer-churn-mlops
+
+# 2. Install all dependencies (production + dev)
+poetry install
+
+# 3. Set up environment variables
+cp .env.example .env
+# Edit .env with your MLflow/DagsHub credentials (optional)
+
+# 4. Pull the DVC-tracked dataset + install pre-commit hooks
 make setup
+
+# 5. Verify everything works
+make test
 ```
 
-### 2. Run the Full Training Pipeline
-You can trigger the entire end-to-end training pipeline. This sequence ingests data, validates it using Pandera schemas, engineers 28 custom features, tunes the LightGBM hyperparameters, optimizes the business threshold, and natively logs all coefficients, metrics, and models to MLflow.
+### 30-Second Demo
+
 ```bash
+# Train the model
 make train
-```
-**Results & Tracking:**
-- **Metrics**: The pipeline outputs complex evaluation metrics onto the terminal and logs ROC AUC, PR AUC, and dynamic financial insights directly.
-- **Model Artifacts**: The strictly compiled `sklearn.Pipeline` object (preprocessor + model) is stored via MLflow and becomes ready for inference.
 
-### 3. Start the Inference API
-Serve your trained model dynamically utilizing our ASGI FastAPI service. *If the model wasn't registered to an MLflow tracking server, the API gracefully falls back to train and cache it purely in-memory in ~15 seconds.*
-```bash
+# Start the API
 make serve
-# Available locally at: http://localhost:8000/docs
+
+# In another terminal — predict churn
+curl -s http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"gender":"Male","SeniorCitizen":0,"Partner":"Yes","Dependents":"No",
+       "tenure":2,"PhoneService":"Yes","MultipleLines":"No",
+       "InternetService":"Fiber optic","OnlineSecurity":"No","OnlineBackup":"No",
+       "DeviceProtection":"No","TechSupport":"No","StreamingTV":"No",
+       "StreamingMovies":"No","Contract":"Month-to-month","PaperlessBilling":"Yes",
+       "PaymentMethod":"Electronic check","MonthlyCharges":70.35,"TotalCharges":140.70}' | python -m json.tool
 ```
 
-### 4. Querying the Model
-Once the server is running on `localhost:8000`, you can interact with the endpoints.
-
-**Single Prediction (cURL)**:
-```bash
-curl -X POST "http://localhost:8000/predict" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "gender": "Male",
-           "SeniorCitizen": 0,
-           "Partner": "Yes",
-           "Dependents": "No",
-           "tenure": 12,
-           "PhoneService": "Yes",
-           "MultipleLines": "No",
-           "InternetService": "Fiber optic",
-           "OnlineSecurity": "No",
-           "OnlineBackup": "Yes",
-           "DeviceProtection": "No",
-           "TechSupport": "No",
-           "StreamingTV": "No",
-           "StreamingMovies": "No",
-           "Contract": "Month-to-month",
-           "PaperlessBilling": "Yes",
-           "PaymentMethod": "Electronic check",
-           "MonthlyCharges": 70.35,
-           "TotalCharges": 844.20
-         }'
-```
-**Expected Response**:
+**Expected Output:**
 ```json
 {
-  "churn_probability": 0.5843,
-  "risk_tier": "HIGH_RISK",
-  "will_churn": true,
-  "threshold_used": 0.34,
-  "request_id": "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
+    "churn_probability": 0.8214,
+    "will_churn": true,
+    "risk_tier": "HIGH_RISK",
+    "threshold_used": 0.34,
+    "request_id": "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
 }
 ```
 
-### 5. Running the Tests & Linters
-Validate that the data interfaces, business constraints, schemas, and endpoint responses remain perfectly healthy.
+---
+
+## 💻 Usage Guide
+
+All commands are available via the `Makefile`. Run `make help` to see all options.
+
+| Command | Description |
+|---------|-------------|
+| `make setup` | First-time setup (install deps, pre-commit hooks, DVC pull) |
+| `make train` | Run the full training pipeline with MLflow logging |
+| `make serve` | Start FastAPI prediction server (port 8000) |
+| `make dashboard` | Launch Streamlit monitoring dashboard (port 8501) |
+| `make test` | Run all 281 tests with coverage report |
+| `make test-unit` | Run unit tests only |
+| `make test-integration` | Run integration tests only |
+| `make format` | Auto-format code (Black + isort) |
+| `make lint` | Run linters (Flake8 + mypy) |
+| `make drift-report` | Generate a data drift monitoring report |
+| `make docker-up` | Start full Docker Compose stack |
+| `make docker-down` | Stop all Docker containers |
+| `make clean` | Remove Python cache files |
+
+### Training Pipeline
+
+The training pipeline executes the following sequence:
+
+```
+Raw CSV → Validate (Pandera) → Preprocess → Engineer Features (28)
+       → 3-Way Split → Build sklearn.Pipeline → Train LightGBM
+       → Optimize Threshold (cost matrix) → Evaluate → Log to MLflow
+```
+
 ```bash
-make test          # Runs 240+ unit & integration tests
-make format        # Auto-formats source code with Black and Isort
-make lint          # Validates types and style protocols with MyPy & Flake8
+# Run training with MLflow tracking
+make train
+
+# Results are logged to:
+# - Terminal: metrics summary
+# - MLflow: full experiment (metrics, params, model artifact)
+# - reports/: evaluation plots (confusion matrix, feature importance, etc.)
+```
+
+### Prediction API
+
+```bash
+# Start with hot-reload (development)
+make serve
+
+# Access interactive docs
+open http://localhost:8000/docs
+```
+
+### Streamlit Dashboard
+
+```bash
+make dashboard
+# Opens at http://localhost:8501
+```
+
+The dashboard provides 4 tabs:
+1. **🎯 Predict** — Interactive single-customer churn prediction form
+2. **📋 Batch Analysis** — Upload CSV for bulk predictions (up to 100 customers)
+3. **📈 Model Performance** — Training metrics, confusion matrices, feature importance
+4. **💰 Business Impact** — ROI calculator showing dollar savings vs. no-model baseline
+
+---
+
+## 📡 API Reference
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/predict` | Single customer churn prediction |
+| `POST` | `/predict/batch` | Batch prediction (1–100 customers) |
+| `GET` | `/health` | Health check (for load balancers / k8s) |
+| `GET` | `/model/info` | Model metadata (version, features, threshold) |
+| `GET` | `/docs` | Interactive OpenAPI documentation |
+
+### POST `/predict` — Request Body
+
+```json
+{
+    "gender": "Male",
+    "SeniorCitizen": 0,
+    "Partner": "Yes",
+    "Dependents": "No",
+    "tenure": 12,
+    "PhoneService": "Yes",
+    "MultipleLines": "No",
+    "InternetService": "Fiber optic",
+    "OnlineSecurity": "No",
+    "OnlineBackup": "Yes",
+    "DeviceProtection": "No",
+    "TechSupport": "No",
+    "StreamingTV": "No",
+    "StreamingMovies": "No",
+    "Contract": "Month-to-month",
+    "PaperlessBilling": "Yes",
+    "PaymentMethod": "Electronic check",
+    "MonthlyCharges": 70.35,
+    "TotalCharges": 844.20
+}
+```
+
+### POST `/predict` — Response
+
+```json
+{
+    "churn_probability": 0.5843,
+    "will_churn": true,
+    "risk_tier": "HIGH_RISK",
+    "threshold_used": 0.34,
+    "request_id": "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
+}
+```
+
+### Risk Tier Definitions
+
+| Tier | Threshold | Recommended Action |
+|------|-----------|-------------------|
+| 🔴 `HIGH_RISK` | probability ≥ 0.60 | Immediate personal outreach, retention offer |
+| 🟡 `MEDIUM_RISK` | 0.35 ≤ probability < 0.60 | Automated retention campaign, usage monitoring |
+| 🟢 `LOW_RISK` | probability < 0.35 | Standard engagement, cross-sell opportunities |
+
+---
+
+## 🐳 Docker Deployment
+
+### Quick Start with Docker Compose
+
+```bash
+# Build and start all services
+docker compose -f docker/docker-compose.yml up --build
+
+# Services:
+#   API:        http://localhost:8000  (FastAPI + Swagger docs)
+#   Dashboard:  http://localhost:8501  (Streamlit)
+#   MLflow:     http://localhost:5000  (Experiment tracker)
+
+# Stop all services
+docker compose -f docker/docker-compose.yml down
+```
+
+### Individual Images
+
+```bash
+# Build API image only
+docker build -f docker/Dockerfile -t churn-api:latest .
+
+# Run API container
+docker run -p 8000:8000 --env-file .env churn-api:latest
+```
+
+### Docker Architecture
+
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| `api` | `churn-api` | 8000 | FastAPI prediction service |
+| `dashboard` | `churn-dashboard` | 8501 | Streamlit monitoring UI |
+| `mlflow` | `ghcr.io/mlflow/mlflow` | 5000 | Experiment tracking server |
+
+**Design choices:**
+- Multi-stage builds minimize image size (builder exports deps → runtime uses slim Python)
+- Non-root `appuser` for security best practices
+- Built-in health checks for container orchestrators (Docker Swarm, k8s, ECS)
+- Internal Docker DNS for service-to-service communication (dashboard → API at `http://api:8000`)
+
+---
+
+## 🧪 Testing
+
+### Test Suite Overview
+
+```
+tests/
+├── conftest.py                    # Shared fixtures, config singleton reset
+├── unit/                          # Component-level tests
+│   ├── test_ingest.py             # Data loading
+│   ├── test_preprocess.py         # Preprocessing logic
+│   ├── test_validate.py           # Pandera schema validation
+│   ├── test_feature_store.py      # Feature engineering (28 features)
+│   ├── test_pipeline.py           # sklearn Pipeline factory
+│   ├── test_evaluate.py           # ML + business metrics
+│   ├── test_threshold.py          # Cost-optimal threshold, risk tiers
+│   ├── test_schemas.py            # Pydantic request/response schemas
+│   ├── test_config_loader.py      # Configuration loading + validation
+│   ├── test_logging.py            # Structured logging format
+│   ├── test_drift_detector.py     # PSI, chi-squared, prediction drift
+│   └── test_reference_builder.py  # Reference data Parquet round-trip
+├── integration/
+│   └── test_api.py                # FastAPI endpoint integration tests
+└── data_tests/
+    └── test_data_validation.py    # Raw data quality checks
+```
+
+### Running Tests
+
+```bash
+# Full suite with coverage
+make test
+# → 281 passed, 75% coverage
+
+# Unit tests only
+make test-unit
+
+# Integration tests only
+make test-integration
+
+# Specific test file
+poetry run pytest tests/unit/test_drift_detector.py -v
+
+# With detailed coverage report
+poetry run pytest --cov=src --cov-report=html
+open htmlcov/index.html
+```
+
+### Test Philosophy
+
+| Principle | Implementation |
+|-----------|---------------|
+| **Isolation** | Config singleton reset between tests (`conftest.py`) |
+| **No side effects** | Tests use fixtures and `tmp_path`, never touch real data |
+| **Fast feedback** | Full suite completes in ~12 seconds |
+| **Realistic fixtures** | Test data mirrors actual Telco dataset schema and distributions |
+
+---
+
+## ⚙️ Configuration
+
+All configuration is managed through YAML files in `configs/` and loaded into typed Python dataclasses via `src/utils/config_loader.py`.
+
+### Config Files
+
+| File | Purpose | Key Settings |
+|------|---------|-------------|
+| `model_config.yaml` | Model algorithm, hyperparameters, cost matrix | `false_negative_cost: 500`, `false_positive_cost: 20` |
+| `feature_config.yaml` | Feature names, target column, engineered feature list | 28 engineered features across 6 groups |
+| `training_config.yaml` | Data splits, cross-validation, experiment name | `test_size: 0.2`, `val_size: 0.1`, `cv_folds: 5` |
+| `monitoring_config.yaml` | Drift detection thresholds | `psi_threshold: 0.25`, `chi_squared_alpha: 0.05` |
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+# MLflow / DagsHub (optional — local tracking used if not set)
+MLFLOW_TRACKING_URI=https://dagshub.com/username/repo.mlflow
+MLFLOW_TRACKING_USERNAME=your_username
+MLFLOW_TRACKING_PASSWORD=your_token
+
+# DVC remote storage
+DVC_REMOTE_URL=https://dagshub.com/username/repo.dvc
+
+# API configuration
+API_HOST=0.0.0.0
+API_PORT=8000
 ```
 
 ---
 
-## 📈 Future Roadmap
+## 🔄 MLOps Practices
 
-The training and API environments are fully functional, resilient, and 100% tested. The upcoming operational components include:
+This project demonstrates the following MLOps maturity practices:
 
-- [ ] **Dockerization**: Containerizing the FastAPI application.
-- [ ] **Evidently AI / Monitoring**: Data drift observability and rolling performance metric thresholds in `src/monitoring/`.
-- [ ] **CI/CD Pipelines**: GitHub Actions specifically targeting tests, linting, and automated pipeline triggers upon Pull Requests.
-- [ ] **Streamlit / Dashboard**: Translating API results into an interactive business intelligence visualizer.
+### Data Management
+| Practice | Implementation |
+|----------|---------------|
+| Data versioning | DVC tracks raw datasets independently from Git |
+| Schema validation | Pandera enforces column types, ranges, and allowed values |
+| Training-serving parity | `sklearn.Pipeline` encapsulates the full transformation chain |
+| Reference snapshots | Parquet-based training data snapshots for drift comparison |
+
+### Model Lifecycle
+| Practice | Implementation |
+|----------|---------------|
+| Experiment tracking | MLflow logs all params, metrics, and model artifacts |
+| Model registry | MLflow Model Registry with staging/production stages |
+| Performance gates | Minimum ROC-AUC (0.82), PR-AUC (0.65), Recall (0.70) required |
+| Reproducibility | Fixed random seeds, locked dependencies (poetry.lock), DVC |
+
+### Deployment & Monitoring
+| Practice | Implementation |
+|----------|---------------|
+| Containerization | Multi-stage Docker builds with health checks |
+| CI/CD | GitHub Actions: Lint → Test → Docker Build on every push |
+| Data drift monitoring | PSI (numerical), Chi-squared (categorical), prediction drift |
+| Observability | Request ID tracing, structured logging, health endpoints |
+
+### Code Quality
+| Practice | Implementation |
+|----------|---------------|
+| Testing | 281 tests, 75% coverage, unit + integration + data validation |
+| Linting | Black (formatting), isort (imports), Flake8 (style), mypy (types) |
+| Pre-commit hooks | Automated checks before every commit |
+| Modular architecture | Clean separation: data → features → models → serving → monitoring |
+
+
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
 
 ---
-_Building data science that aligns tightly with engineering rigor and business impacts._
+
+## 🙏 Acknowledgements
+
+- [Telco Customer Churn Dataset](https://www.kaggle.com/blastchar/telco-customer-churn) — IBM/Kaggle
+- [LightGBM](https://lightgbm.readthedocs.io/) — Microsoft
+- [MLflow](https://mlflow.org/) — Databricks
+- [FastAPI](https://fastapi.tiangolo.com/) — Sebastián Ramírez
+- [Scikit-learn](https://scikit-learn.org/) — Community
+- [Pandera](https://pandera.readthedocs.io/) — Niels Bantilan
+
+---
+
+<p align="center">
+<em>Building data science that aligns tightly with engineering rigor and business impact.</em>
+</p>

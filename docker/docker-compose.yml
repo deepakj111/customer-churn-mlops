@@ -1,0 +1,102 @@
+# ============================================================================
+# Docker Compose — Full local MLOps stack.
+#
+# Services:
+#   api       : FastAPI prediction API (port 8000)
+#   dashboard : Streamlit monitoring dashboard (port 8501)
+#   mlflow    : MLflow tracking server (port 5000)
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up --build
+#   docker compose -f docker/docker-compose.yml down
+#
+# All services share the same Docker network, so the dashboard can reach
+# the API at http://api:8000 (Docker internal DNS) without exposing it
+# externally. MLflow is reachable at http://mlflow:5000.
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # FastAPI Prediction API
+  # --------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: churn-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Point the API to the local MLflow server for model retrieval.
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - LOG_LEVEL=INFO
+    volumes:
+      # Mount raw data so the local training fallback can access it.
+      - ../data/raw:/app/data/raw:ro
+    depends_on:
+      mlflow:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - churn-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Streamlit Dashboard
+  # --------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.streamlit
+    container_name: churn-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      # The dashboard calls the API via Docker internal networking.
+      - API_URL=http://api:8000
+    volumes:
+      # Mount reports directory for dynamic report loading.
+      - ../reports:/app/reports:ro
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - churn-network
+
+  # --------------------------------------------------------------------------
+  # MLflow Tracking Server
+  # --------------------------------------------------------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.21.3
+    container_name: churn-mlflow
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri sqlite:///mlflow/mlflow.db
+        --default-artifact-root /mlflow/artifacts
+    volumes:
+      # Persists experiment data across container restarts.
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+    networks:
+      - churn-network
+
+# ============================================================================
+# Shared resources
+# ============================================================================
+volumes:
+  mlflow-data:
+    driver: local
+
+networks:
+  churn-network:
+    driver: bridge

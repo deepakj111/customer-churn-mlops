@@ -154,13 +154,25 @@ def _train_local_model() -> None:
     validated_df = validate_raw_data(raw_df)
     X, y = run_preprocessing(validated_df)
 
-    # Train/val split for threshold tuning
-    X_train, X_val, y_train, y_val = train_test_split(
+    # 3-way stratified split matching run_training_experiment():
+    #   train (70%) / val (10%) / test (20%)
+    # The test set is discarded here — it exists only so the split
+    # proportions are identical to the production training pipeline.
+    # The val set is used exclusively for threshold optimisation.
+    X_trainval, _X_test, y_trainval, _y_test = train_test_split(
         X,
         y,
         test_size=cfg.training.test_size,
         random_state=cfg.training.random_state,
         stratify=y,
+    )
+    relative_val_size = cfg.training.val_size / (1.0 - cfg.training.test_size)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_trainval,
+        y_trainval,
+        test_size=relative_val_size,
+        random_state=cfg.training.random_state,
+        stratify=y_trainval,
     )
 
     # Build and fit pipeline

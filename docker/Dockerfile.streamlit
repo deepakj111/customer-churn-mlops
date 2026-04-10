@@ -1,0 +1,77 @@
+# ============================================================================
+# Dockerfile for the Streamlit monitoring dashboard.
+#
+# Shares the same builder stage pattern as the API Dockerfile.
+# The dashboard is a read-only client that calls the FastAPI /predict
+# endpoint — it doesn't need the model or training data directly.
+#
+# Build:
+#   docker build -f docker/Dockerfile.streamlit -t churn-dashboard:latest .
+#
+# Run:
+#   docker run -p 8501:8501 -e API_URL=http://api:8000 churn-dashboard:latest
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: Builder
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+ENV POETRY_VERSION=2.1.3
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}" poetry-plugin-export
+
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry lock && \
+    poetry export \
+    --format requirements.txt \
+    --output /build/requirements.txt \
+    --no-interaction
+
+# ---------------------------------------------------------------------------
+# Stage 2: Runtime
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+LABEL maintainer="Deepak Jangra" \
+      description="Customer Churn MLOps — Streamlit Dashboard" \
+      version="0.1.0"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install runtime system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libgomp1 \
+        curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy dashboard and supporting source code
+COPY dashboards/ ./dashboards/
+COPY src/ ./src/
+COPY configs/ ./configs/
+COPY reports/ ./reports/
+
+# Non-root user
+RUN useradd --create-home --shell /bin/bash appuser
+USER appuser
+
+EXPOSE 8501
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Streamlit config: disable telemetry, disable CORS warning, set port.
+CMD ["streamlit", "run", "dashboards/streamlit_app.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--server.headless=true", \
+     "--browser.gatherUsageStats=false"]
