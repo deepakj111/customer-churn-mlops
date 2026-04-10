@@ -27,7 +27,7 @@ FROM python:3.11-slim AS builder
 WORKDIR /build
 
 # Install Poetry (locked version for reproducibility)
-ENV POETRY_VERSION=2.1.3
+ENV POETRY_VERSION=2.3.3
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}" poetry-plugin-export
 
 # Copy only dependency files first — maximises Docker layer caching.
