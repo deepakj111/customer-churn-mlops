@@ -106,9 +106,11 @@ jobs:
       # If secrets aren't available (e.g. fork PRs), tests that need
       # the CSV will be skipped via the conftest marker.
       - name: Pull data with DVC
-        run: poetry run dvc pull || echo "DVC pull failed — some data tests may be skipped"
-        env:
-          DVC_REMOTE_URL: ${{ secrets.DVC_REMOTE_URL }}
+        run: |
+          poetry run dvc remote modify origin --local auth basic
+          poetry run dvc remote modify origin --local user ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+          poetry run dvc remote modify origin --local password ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+          poetry run dvc pull
 
       - name: Run tests with coverage
         run: poetry run pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
