@@ -35,15 +35,8 @@ train a real model. Mark them with @pytest.mark.slow if you want
 to skip them in fast CI runs.
 """
 
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
-
-pytestmark = pytest.mark.skipif(
-    not Path("data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv").exists(),
-    reason="Data missing for local model training. Skipping tests.",
-)
 
 # ---------------------------------------------------------------------------
 # Fixtures
