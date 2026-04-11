@@ -31,7 +31,16 @@ Common causes of data drift in churn prediction:
 
 ## Types of Drift Detected
 
-### 1. Numerical Feature Drift — PSI (Population Stability Index)
+### 1. Real-Time API Metrics (Prometheus & Grafana)
+
+**What it measures:** Continuous tracking of API requests, prediction latency overhead, error rates, and the raw distribution of churn probabilities streaming into the endpoint.
+
+**Method:** Time-series metric `Counters` and `Histograms` scraped concurrently by **Prometheus** at the `/metrics` endpoint.
+
+**Interpretation:**
+Visualized dynamically inside **Grafana** using the pre-provisioned "Churn Prediction API" dashboard. This isn't "drift" per se, but instead provides a second-by-second operational view to ensure the model service isn't crashing and predictions are being served in a timely manner.
+
+### 2. Numerical Feature Drift — PSI (Population Stability Index)
 
 **What it measures:** Whether the distribution shape of a numerical feature has changed.
 
@@ -51,7 +60,7 @@ PSI = Σ (P_current - P_reference) × ln(P_current / P_reference)
 
 **Example:** If `MonthlyCharges` has PSI = 0.32, it means the distribution of monthly charges in production data is significantly different from training data — perhaps due to a pricing change.
 
-### 2. Categorical Feature Drift — Chi-Squared Test
+### 3. Categorical Feature Drift — Chi-Squared Test
 
 **What it measures:** Whether the category proportions of a categorical feature have changed.
 
@@ -66,7 +75,7 @@ PSI = Σ (P_current - P_reference) × ln(P_current / P_reference)
 
 **Example:** If `Contract` type distribution changes from (55% month-to-month, 25% one-year, 20% two-year) to (30% month-to-month, 40% one-year, 30% two-year), the chi-squared test will flag this as drift.
 
-### 3. Prediction Drift — Mean Probability Shift
+### 4. Prediction Drift — Mean Probability Shift
 
 **What it measures:** Whether the model's average predicted churn probability has changed.
 

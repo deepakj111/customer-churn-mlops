@@ -23,7 +23,7 @@ The system follows a **layered architecture** where each layer has a single resp
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                         Presentation                             │
-│   Streamlit Dashboard (port 8501)  │  FastAPI Swagger (port 8000)│
+│ Streamlit (port 8501) │ FastAPI Docs (port 8000) │ Grafana (3000)│
 ├──────────────────────────────────────────────────────────────────┤
 │                         Serving Layer                            │
 │   api.py  │  schemas.py (Pydantic v2)  │  model_loader.py       │
@@ -41,7 +41,7 @@ The system follows a **layered architecture** where each layer has a single resp
 │   config_loader.py  │  logging.py  │  drift_detector.py         │
 ├──────────────────────────────────────────────────────────────────┤
 │                         External Services                        │
-│   MLflow  │  DVC  │  Docker  │  GitHub Actions                  │
+│  MLflow │ DVC │ Docker │ GitHub Actions │ Prometheus (port 9090) │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -268,8 +268,11 @@ FastAPI Application (api.py)
     ├── GET /health
     │   └── Returns status + model_loaded flag
     │
-    └── GET /model/info
-        └── Returns model metadata from model_loader
+    ├── GET /model/info
+    │   └── Returns model metadata from model_loader
+    │
+    └── GET /metrics
+        └── Exposes Prometheus counters and histograms
 
 Model Loader (model_loader.py)
     │
@@ -289,6 +292,31 @@ Model Loader (model_loader.py)
 ---
 
 ## Monitoring Architecture
+
+The system implements a dual-mode monitoring architecture combining real-time API observability with periodic batch data drift detection.
+
+### 1. Real-Time Observability (Prometheus & Grafana)
+
+```
+                            Production Requests
+                                     │
+    ┌────────────────────────────────▼─────────────────────────────────┐
+    │                       FastAPI /predict                           │
+    │  Records Counter (reqs, errors) & Histogram (latency, probs)     │
+    └────────────────────────────────┬─────────────────────────────────┘
+                                     │ Exposes /metrics
+    ┌────────────────────────────────▼─────────────────────────────────┐
+    │                       Prometheus (9090)                          │
+    │      Iteratively scrapes and stores time-series metrics          │
+    └────────────────────────────────┬─────────────────────────────────┘
+                                     │ Queried via PromQL
+    ┌────────────────────────────────▼─────────────────────────────────┐
+    │                        Grafana (3000)                            │
+    │         Visualizes request load, churn drift, and errors         │
+    └──────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Batch Data Drift Detection (PSI & Chi-Squared)
 
 ```
 Training Data (saved as reference)

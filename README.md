@@ -50,14 +50,17 @@ A **production-grade Machine Learning Operations pipeline** that predicts custom
 - **Risk tier classification** (High / Medium / Low) with actionable business recommendations
 
 ### 📊 Monitoring & Observability
+- **Real-time API Metrics**: Prometheus instrumentation tracking request volumes, error rates, latencies, and prediction distributions over time. Actively scraped from `/metrics`.
+- **Grafana Dashboards**: Live, out-of-the-box provisioned dashboard visualizing incoming prediction requests.
 - **Data drift detection** using PSI (numerical) and Chi-squared (categorical) statistical tests
 - **Prediction drift tracking** via relative mean shift against training baseline
 - **Config-driven thresholds** — all monitoring parameters tunable from YAML without code changes
 
 ### 🐳 DevOps & Infrastructure
 - **Multi-stage Docker builds** — optimized for size (slim Python) and security (non-root user)
-- **Docker Compose** — one-command local stack (API + Dashboard + MLflow)
-- **GitHub Actions CI/CD** — automated linting, testing, and Docker image validation on every push
+- **Docker Compose** — one-command local stack (API + Dashboard + MLflow + Prometheus + Grafana)
+- **Continuous Integration (CI)** — automated linting, testing, and Docker image validation on every PR
+- **Continuous Deployment (CD)** — automated Docker build and push to GitHub Container Registry (GHCR) upon merges to `main`
 - **DVC** for dataset versioning, **Poetry** for dependency management
 
 ### 🧪 Quality Assurance
@@ -73,7 +76,8 @@ A **production-grade Machine Learning Operations pipeline** that predicts custom
 ```
                          ┌─────────────────────────────────────────┐
                          │            GitHub Actions CI/CD         │
-                         │   Lint → Test (281) → Docker Build      │
+                         │   Lint → Test (285) → Docker Build &    │
+                         │   Push Image to Container Registry      │
                          └───────────────┬─────────────────────────┘
                                          │
     ┌────────────┐    ┌──────────┐    ┌──┴───────┐    ┌──────────────┐
@@ -92,12 +96,17 @@ A **production-grade Machine Learning Operations pipeline** that predicts custom
          │  Streamlit   │◀──│  FastAPI      │◀──│  Model Loader       │
          │  Dashboard   │   │  /predict     │   │  (MLflow→Local      │
          │  (port 8501) │   │  (port 8000)  │   │   fallback)         │
-         └─────────────┘    └──────────────┘    └─────────────────────┘
-                                    │
-                            ┌───────┴───────┐
-                            │  Drift Monitor│
-                            │  (PSI, χ²)    │
-                            └───────────────┘
+         └─────────────┘    └──────┬───────┘    └─────────────────────┘
+                                   │
+                    ┌──────────────┴───────────────┐
+                    │          Prometheus          │
+                    │        (Scrapes /metrics)    │
+                    └──────────────┬───────────────┘
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │           Grafana            │
+                    │    (Live Traffic Dashboards) │
+                    └──────────────────────────────┘
 ```
 
 **Key Design Decisions:**
@@ -383,12 +392,13 @@ The dashboard provides 4 tabs:
 
 ```bash
 # Build and start all services
-docker compose -f docker/docker-compose.yml up --build
+docker compose -f docker/docker-compose.yml up --build -d
 
 # Services:
-#   API:        http://localhost:8000  (FastAPI + Swagger docs)
+#   API:        http://localhost:8000  (FastAPI + Swagger docs + /metrics)
 #   Dashboard:  http://localhost:8501  (Streamlit)
 #   MLflow:     http://localhost:5000  (Experiment tracker)
+#   Grafana:    http://localhost:3000  (Real-time dashboards)
 
 # Stop all services
 docker compose -f docker/docker-compose.yml down
@@ -411,6 +421,8 @@ docker run -p 8000:8000 --env-file .env churn-api:latest
 | `api` | `churn-api` | 8000 | FastAPI prediction service |
 | `dashboard` | `churn-dashboard` | 8501 | Streamlit monitoring UI |
 | `mlflow` | `ghcr.io/mlflow/mlflow` | 5000 | Experiment tracking server |
+| `prometheus` | `prom/prometheus` | 9090 | Metrics scraper for the API |
+| `grafana` | `grafana/grafana`| 3000 | Real-time observability dashboards |
 
 **Design choices:**
 - Multi-stage builds minimize image size (builder exports deps → runtime uses slim Python)
@@ -534,10 +546,10 @@ This project demonstrates the following MLOps maturity practices:
 ### Deployment & Monitoring
 | Practice | Implementation |
 |----------|---------------|
-| Containerization | Multi-stage Docker builds with health checks |
-| CI/CD | GitHub Actions: Lint → Test → Docker Build on every push |
+| Containerization | Multi-stage Docker builds with persistent data volumes |
+| CI/CD | GitHub Actions: Push to GHCR on main branch with parallel test/lint gates |
 | Data drift monitoring | PSI (numerical), Chi-squared (categorical), prediction drift |
-| Observability | Request ID tracing, structured logging, health endpoints |
+| Observability | Prometheus `/metrics` scraping, Grafana live Dashboards, Request ID tracing |
 
 ### Code Quality
 | Practice | Implementation |

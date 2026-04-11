@@ -126,6 +126,8 @@ docker compose -f docker/docker-compose.yml down -v
 | `api` | `http://api:8000` | `http://localhost:8000` | FastAPI prediction API |
 | `dashboard` | `http://dashboard:8501` | `http://localhost:8501` | Streamlit dashboard |
 | `mlflow` | `http://mlflow:5000` | `http://localhost:5000` | MLflow tracking server |
+| `prometheus` | `http://prometheus:9090` | `http://localhost:9090` | Prometheus metrics scraper |
+| `grafana` | `http://grafana:3000` | `http://localhost:3000` | Grafana observability UI |
 
 ### Internal Networking
 
@@ -139,6 +141,8 @@ Services communicate via Docker's internal DNS:
 | Volume | Mapped To | Purpose |
 |--------|----------|---------|
 | `mlflow-data` | `/mlflow` | MLflow experiments, artifacts, and SQLite database |
+| `prometheus-data` | `/prometheus` | Prometheus metric histories |
+| `grafana-data` | `/var/lib/grafana`| Grafana dashboard settings and configurations |
 | `../data/raw` (bind mount) | `/app/data/raw:ro` | Read-only access to training data for local model fallback |
 | `../reports` (bind mount) | `/app/reports:ro` | Report images displayed in the dashboard |
 
