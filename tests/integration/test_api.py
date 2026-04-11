@@ -415,3 +415,24 @@ class TestModelInfoEndpoint:
         body = response.json()
 
         assert body["feature_count"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Metrics endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestMetricsEndpoint:
+    """Tests for GET /metrics."""
+
+    def test_metrics_returns_200(self, client):
+        """Metrics endpoint should return 200."""
+        response = client.get("/metrics")
+        assert response.status_code == 200
+
+    def test_metrics_content(self, client, valid_customer):
+        """Metrics endpoint should return Prometheus metrics after a request."""
+        client.post("/predict", json=valid_customer)
+        response = client.get("/metrics")
+        assert response.status_code == 200
+        assert "prediction_requests_total" in response.text

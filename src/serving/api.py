@@ -35,6 +35,7 @@ Usage:
 
 from __future__ import annotations
 
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -43,7 +44,8 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 from src.serving.model_loader import get_model, get_model_info, get_threshold
 from src.serving.schemas import (
@@ -59,6 +61,26 @@ from src.serving.schemas import (
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Prometheus Metrics
+# ---------------------------------------------------------------------------
+
+PREDICTION_REQUEST_COUNT = Counter(
+    "prediction_requests_total", "Total prediction requests", ["endpoint"]
+)
+PREDICTION_ERROR_COUNT = Counter(
+    "prediction_errors_total", "Total prediction errors", ["endpoint"]
+)
+PREDICTION_LATENCY = Histogram(
+    "prediction_latency_seconds", "Prediction latency", ["endpoint"]
+)
+CHURN_PROBABILITY_HISTOGRAM = Histogram(
+    "churn_prediction_probability",
+    "Distribution of churn probabilities predicted",
+    buckets=(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +326,17 @@ async def model_info() -> ModelInfoResponse:
     )
 
 
+@app.get(
+    "/metrics",
+    tags=["System"],
+    summary="Prometheus metrics",
+    description="Returns API and model metrics scraped by Prometheus.",
+)
+async def get_metrics():
+    """Return Prometheus metrics."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.post(
     "/predict",
     response_model=PredictionResponse,
@@ -331,10 +364,15 @@ async def predict(
     request_id = request.state.request_id
 
     logger.info("Prediction request received [request_id=%s]", request_id)
+    PREDICTION_REQUEST_COUNT.labels(endpoint="predict").inc()
+    start_time = time.time()
 
     try:
         df = _customer_to_dataframe(customer)
         response = _predict_single(df, request_id)
+
+        PREDICTION_LATENCY.labels(endpoint="predict").observe(time.time() - start_time)
+        CHURN_PROBABILITY_HISTOGRAM.observe(response.churn_probability)
 
         logger.info(
             "Prediction complete [request_id=%s]: probability=%.4f, "
@@ -348,9 +386,11 @@ async def predict(
         return response
 
     except RuntimeError as e:
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict").inc()
         # Model not loaded
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict").inc()
         logger.error(
             "Prediction failed [request_id=%s]: %s",
             request_id,
@@ -396,6 +436,8 @@ async def predict_batch(
         request_id,
         len(batch.customers),
     )
+    PREDICTION_REQUEST_COUNT.labels(endpoint="predict_batch").inc()
+    start_time = time.time()
 
     try:
         # Build a single DataFrame from all customers for efficient
@@ -436,6 +478,13 @@ async def predict_batch(
         medium_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.MEDIUM)
         low_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.LOW)
 
+        for proba in probas:
+            CHURN_PROBABILITY_HISTOGRAM.observe(float(proba))
+
+        PREDICTION_LATENCY.labels(endpoint="predict_batch").observe(
+            time.time() - start_time
+        )
+
         response = BatchPredictionResponse(
             predictions=predictions,
             total_customers=len(predictions),
@@ -461,8 +510,10 @@ async def predict_batch(
         return response
 
     except RuntimeError as e:
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict_batch").inc()
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict_batch").inc()
         logger.error(
             "Batch prediction failed [request_id=%s]: %s",
             request_id,
