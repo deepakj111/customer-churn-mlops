@@ -1,6 +1,6 @@
 # 🔭 Customer Churn Predictor — End-to-End MLOps Pipeline
 
-[![CI Pipeline](https://github.com/deepakjangra/customer-churn-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/deepakjangra/customer-churn-mlops/actions/workflows/ci.yml)
+[![CI Pipeline](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/Tests-281%20Passed-brightgreen.svg?logo=pytest)](https://docs.pytest.org/)
 [![Coverage](https://img.shields.io/badge/Coverage-75%25-yellowgreen.svg)](htmlcov/index.html)
