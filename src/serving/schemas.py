@@ -327,6 +327,32 @@ class PredictionResponse(BaseModel):
         description="Top features driving the prediction, mapped to their SHAP values.",
         examples=[{"is_month_to_month": 0.45, "TotalCharges": -0.12, "tenure": 0.08}],
     )
+    conformal_prediction: Optional[dict[str, dict]] = Field(
+        default=None,
+        description=(
+            "Conformal prediction sets at 90%/95% "
+            "confidence levels. includes_churn and "
+            "includes_no_churn indicate which classes are "
+            "in the guaranteed prediction set. is_uncertain "
+            "is True when both classes are included."
+        ),
+        examples=[
+            {
+                "confidence_90": {
+                    "includes_churn": True,
+                    "includes_no_churn": False,
+                    "is_uncertain": False,
+                    "set_size": 1,
+                },
+                "confidence_95": {
+                    "includes_churn": True,
+                    "includes_no_churn": True,
+                    "is_uncertain": True,
+                    "set_size": 2,
+                },
+            }
+        ],
+    )
     request_id: Optional[str] = Field(
         default=None,
         description="Unique request identifier for traceability.",

@@ -229,6 +229,33 @@ def get_feature_store():
     return _feature_store
 
 
+_conformal_predictor = None
+_conformal_available = None
+
+
+def get_conformal_predictor():
+    """Lazily load the conformal predictor (returns None if not trained)."""
+    global _conformal_predictor, _conformal_available
+    if _conformal_available is None:
+        from pathlib import Path
+
+        try:
+            from src.models.conformal import ConformalChurnPredictor
+
+            artifacts_path = Path("models/conformal")
+            if (artifacts_path / "conformal_model.joblib").exists():
+                _conformal_predictor = ConformalChurnPredictor.load(artifacts_path)
+                _conformal_available = True
+                logger.info("Conformal predictor loaded successfully.")
+            else:
+                _conformal_available = False
+                logger.info("No conformal artifacts found — skipping.")
+        except Exception as e:
+            _conformal_available = False
+            logger.warning("Failed to load conformal predictor: %s", e)
+    return _conformal_predictor
+
+
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
@@ -347,12 +374,22 @@ def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
     explanations = _explain_predictions(pipeline, df)
     explanation = explanations[0] if explanations else None
 
+    # Conformal prediction (uncertainty quantification)
+    conformal_result = None
+    conformal = get_conformal_predictor()
+    if conformal is not None:
+        try:
+            conformal_result = conformal.predict_single(df)
+        except Exception as e:
+            logger.warning("Conformal prediction failed: %s", e)
+
     return PredictionResponse(
         churn_probability=round(proba, 4),
         risk_tier=risk_tier,
         will_churn=will_churn,
         threshold_used=round(threshold, 4),
         explanation=explanation,
+        conformal_prediction=conformal_result,
         request_id=request_id,
     )
 

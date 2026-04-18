@@ -246,6 +246,41 @@ def predict_batch(customers: list[dict]) -> dict | None:
         return None
 
 
+def display_conformal_prediction(result: dict) -> None:
+    """Render conformal prediction results if available."""
+    conformal = result.get("conformal_prediction")
+    if not conformal:
+        return
+
+    st.markdown("---")
+    st.markdown("#### 🔬 Uncertainty Quantification (Conformal Prediction)")
+    st.caption(
+        "Distribution-free prediction sets with mathematically " "guaranteed coverage."
+    )
+
+    for level_key in ["confidence_90", "confidence_95"]:
+        data = conformal.get(level_key)
+        if not data:
+            continue
+        pct = level_key.replace("confidence_", "") + "%"
+        if data["is_uncertain"]:
+            badge = f'<span class="risk-medium">⚠️ UNCERTAIN at {pct}</span>'
+            detail = (
+                f"At {pct} confidence, both Churn and No-Churn "
+                "are in the prediction set."
+            )
+        elif data["includes_churn"]:
+            badge = f'<span class="risk-high">🔴 CHURN at {pct}</span>'
+            detail = f"At {pct} confidence, only Churn is in " "the prediction set."
+        else:
+            badge = f'<span class="risk-low">🟢 NO CHURN at {pct}</span>'
+            detail = f"At {pct} confidence, only No-Churn is in " "the prediction set."
+        st.markdown(
+            f"- {badge} — {detail}",
+            unsafe_allow_html=True,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Sidebar — API status and model info
 # ---------------------------------------------------------------------------
@@ -384,6 +419,8 @@ with tab_feast:
                 for feat, val in result["explanation"].items():
                     direction = "⬆️ Increases Risk" if val > 0 else "⬇️ Decreases Risk"
                     st.markdown(f"- **{feat}**: {val:+.4f} ({direction})")
+
+            display_conformal_prediction(result)
 
             # Recommendation based on risk tier
             st.markdown("---")
@@ -568,6 +605,8 @@ with tab_predict:
                 for feat, val in result["explanation"].items():
                     direction = "⬆️ Increases Risk" if val > 0 else "⬇️ Decreases Risk"
                     st.markdown(f"- **{feat}**: {val:+.4f} ({direction})")
+
+            display_conformal_prediction(result)
 
             # Recommendation based on risk tier
             st.markdown("---")
