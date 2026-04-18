@@ -289,13 +289,22 @@ st.markdown(
     '<h1 class="main-header">📊 Customer Churn Predictor</h1>', unsafe_allow_html=True
 )
 
-tab_feast, tab_predict, tab_batch, tab_performance, tab_drift, tab_business = st.tabs(
+(
+    tab_feast,
+    tab_predict,
+    tab_batch,
+    tab_performance,
+    tab_drift,
+    tab_uplift,
+    tab_business,
+) = st.tabs(
     [
         "⚡ Feast Online Predict",
         "🎯 Predict (Manual Form)",
         "📋 Batch Analysis",
         "📈 Model Performance",
         "📉 Data Drift",
+        "🏥 Causal Uplift",
         "💰 Business Impact",
     ]
 )
@@ -840,7 +849,89 @@ with tab_drift:
 
 
 # ---------------------------------------------------------------------------
-# Tab 5: Business Impact
+# Tab 5: Causal Uplift Modeling
+# ---------------------------------------------------------------------------
+
+with tab_uplift:
+    st.markdown("### 🏥 Prescriptive Analytics: Causal Uplift Modeling")
+    st.caption(
+        "Moving beyond 'Who will churn' to 'Who will change their mind if we intervene?'. Models the Conditional Average Treatment Effect (CATE)."
+    )
+
+    uplift_report_path = REPORTS_DIR / "uplift_report.json"
+    if uplift_report_path.exists():
+        try:
+            import json
+
+            with open(uplift_report_path, "r") as f:
+                uplift_data = json.load(f)
+
+            st.markdown(
+                f"**Target Population**: {uplift_data.get('eligible_customers', 0)} customers analyzed for 'TechSupport' intervention."
+            )
+
+            segs = uplift_data.get("segments", {})
+            cates = uplift_data.get("avg_cate_by_segment", {})
+
+            # Display metrics in cards
+            s1, s2, s3, s4 = st.columns(4)
+            with s1:
+                st.markdown(
+                    f"""<div class="metric-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                        <h3>Persuadables (TARGET)</h3>
+                        <h2>{segs.get('Persuadable (Target)', 0)}</h2>
+                        <h4 style="font-size:0.8rem; margin-top:5px;">Avg Effect: {cates.get('Persuadable (Target)', 0):.1%}</h4>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with s2:
+                st.markdown(
+                    f"""<div class="metric-card" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);">
+                        <h3>Sure Things (IGNORE)</h3>
+                        <h2>{segs.get('Sure Thing (Ignore)', 0)}</h2>
+                        <h4 style="font-size:0.8rem; margin-top:5px;">Avg Effect: {cates.get('Sure Thing (Ignore)', 0):.1%}</h4>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with s3:
+                st.markdown(
+                    f"""<div class="metric-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                        <h3>Lost Causes (IGNORE)</h3>
+                        <h2>{segs.get('Lost Cause (Ignore)', 0)}</h2>
+                        <h4 style="font-size:0.8rem; margin-top:5px;">Avg Effect: {cates.get('Lost Cause (Ignore)', 0):.1%}</h4>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with s4:
+                st.markdown(
+                    f"""<div class="metric-card" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
+                        <h3>Sleeping Dogs (DANGER)</h3>
+                        <h2>{segs.get('Sleeping Dog (Do Not Disturb)', 0)}</h2>
+                        <h4 style="font-size:0.8rem; margin-top:5px;">Avg Effect: +{cates.get('Sleeping Dog (Do Not Disturb)', 0):.1%}</h4>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("---")
+            st.markdown(
+                """
+            #### 🧠 Causal ML Interpretation
+            *   **Persuadables**: These customers have a high base churn risk, but the model proves that giving them TechSupport heavily *reduces* their risk. **Give them the offer.**
+            *   **Sure Things**: They are not at risk of churning anyway. Giving them free TechSupport is a waste of money.
+            *   **Lost Causes**: High churn risk, but TechSupport won't save them. The money is better spent elsewhere.
+            *   **Sleeping Dogs**: Very dangerous. They have low base risk, but actively reaching out triggers them to evaluate their plan and churn. **Do not contact.**
+            """
+            )
+
+        except Exception as e:
+            st.error(f"Failed to load uplift report: {e}")
+    else:
+        st.info(
+            "📭 No causal uplift report found. Run `scripts/train_uplift.py` to generate prescriptive modeling insights."
+        )
+
+# ---------------------------------------------------------------------------
+# Tab 6: Business Impact
 # ---------------------------------------------------------------------------
 
 with tab_business:
