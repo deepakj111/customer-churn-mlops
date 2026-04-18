@@ -237,6 +237,71 @@ def _customer_to_dataframe(customer: "CustomerFeatures") -> pd.DataFrame:
     return pd.DataFrame([data])
 
 
+def _explain_predictions(pipeline, df: pd.DataFrame) -> list[dict[str, float] | None]:
+    """
+    Compute SHAP values for a DataFrame to identify top drivers per row.
+    Returns a list of dictionaries (top 3 features and their SHAP contributions).
+    """
+    try:
+        import shap
+
+        base_pipeline = (
+            pipeline.estimator if hasattr(pipeline, "estimator") else pipeline
+        )
+        classifier = base_pipeline.named_steps["classifier"]
+
+        X_engineered = base_pipeline.named_steps["feature_engineering"].transform(df)
+        X_preprocessed = base_pipeline.named_steps["preprocessor"].transform(
+            X_engineered
+        )
+        if "feature_selection" in base_pipeline.named_steps:
+            X_selected = base_pipeline.named_steps["feature_selection"].transform(
+                X_preprocessed
+            )
+            selected_indices = base_pipeline.named_steps[
+                "feature_selection"
+            ].get_support(indices=True)
+            feature_names = base_pipeline.named_steps[
+                "preprocessor"
+            ].get_feature_names_out()
+            feature_names = [feature_names[i] for i in selected_indices]
+        else:
+            X_selected = X_preprocessed
+            feature_names = base_pipeline.named_steps[
+                "preprocessor"
+            ].get_feature_names_out()
+
+        explainer = shap.TreeExplainer(classifier)
+        shap_values = explainer.shap_values(X_selected)
+
+        explanations: list[dict[str, float] | None] = []
+        # Support various SHAP versions and model outputs
+        sv_array = (
+            shap_values[1]
+            if isinstance(shap_values, list)
+            else (shap_values.values if hasattr(shap_values, "values") else shap_values)
+        )
+
+        for i in range(len(df)):
+            sv = sv_array[i]
+            feature_contributions = {
+                feat: float(val) for feat, val in zip(feature_names, sv)
+            }
+            top_3 = dict(
+                sorted(
+                    feature_contributions.items(),
+                    key=lambda item: abs(item[1]),
+                    reverse=True,
+                )[:3]
+            )
+            explanations.append(top_3)
+
+        return explanations
+    except Exception as e:
+        logger.warning("SHAP explanation failed: %s", e)
+        return [None] * len(df)
+
+
 def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
     """
     Run prediction on a single-row DataFrame and build the response.
@@ -246,7 +311,7 @@ def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
         2. predict_proba → churn probability
         3. Apply threshold → binary decision
         4. Map probability to risk tier
-        5. Build PredictionResponse
+        5. Build PredictionResponse with SHAP explanation
     """
     from src.models.threshold import get_risk_tier
 
@@ -258,11 +323,15 @@ def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
     will_churn = proba >= threshold
     risk_tier = RiskTier(get_risk_tier(proba))
 
+    explanations = _explain_predictions(pipeline, df)
+    explanation = explanations[0] if explanations else None
+
     return PredictionResponse(
         churn_probability=round(proba, 4),
         risk_tier=risk_tier,
         will_churn=will_churn,
         threshold_used=round(threshold, 4),
+        explanation=explanation,
         request_id=request_id,
     )
 
@@ -458,18 +527,22 @@ async def predict_batch(
         # Vectorised prediction — much faster than N individual calls
         probas = pipeline.predict_proba(df)[:, 1]
 
+        explanations = _explain_predictions(pipeline, df)
+
         from src.models.threshold import get_risk_tier
 
         predictions = []
         for i, proba in enumerate(probas):
             proba_float = float(proba)
             risk_tier = RiskTier(get_risk_tier(proba_float))
+            explanation = explanations[i] if explanations else None
             predictions.append(
                 PredictionResponse(
                     churn_probability=round(proba_float, 4),
                     risk_tier=risk_tier,
                     will_churn=proba_float >= threshold,
                     threshold_used=round(threshold, 4),
+                    explanation=explanation,
                     request_id=request_id,
                 )
             )

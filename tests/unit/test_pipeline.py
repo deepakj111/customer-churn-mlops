@@ -87,14 +87,19 @@ class TestBuildPipeline:
         result = build_pipeline()
         assert isinstance(result, Pipeline)
 
-    def test_has_three_steps(self):
+    def test_has_four_steps(self):
         result = build_pipeline()
-        assert len(result.steps) == 3
+        assert len(result.steps) == 4
 
     def test_step_names(self):
         result = build_pipeline()
         names = [s[0] for s in result.steps]
-        assert names == ["feature_engineering", "preprocessor", "classifier"]
+        assert names == [
+            "feature_engineering",
+            "preprocessor",
+            "feature_selection",
+            "classifier",
+        ]
 
     def test_param_override_applied(self):
         pipeline = build_pipeline(params={"random_state": 42})

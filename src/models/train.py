@@ -203,17 +203,26 @@ def run_training_experiment(
         logger.info("Fitting pipeline on full training set...")
         pipeline.fit(X_train, y_train)
 
+        # Step 2.5 — Calibrate probabilities on VALIDATION set
+        from sklearn.calibration import CalibratedClassifierCV
+
+        logger.info("Calibrating pipeline on validation set...")
+        calibrated_pipeline = CalibratedClassifierCV(
+            estimator=pipeline, method="isotonic", cv="prefit"
+        )
+        calibrated_pipeline.fit(X_val, y_val)
+
         # Step 3 — Find optimal threshold on VALIDATION set (not test)
         # This prevents data leakage: the threshold is tuned on val,
         # and the test set remains untouched until final evaluation.
-        y_val_proba = pipeline.predict_proba(X_val)[:, 1]
+        y_val_proba = calibrated_pipeline.predict_proba(X_val)[:, 1]
         optimal_threshold = find_cost_optimal_threshold(y_val.values, y_val_proba)
         f1_threshold = find_f1_optimal_threshold(y_val.values, y_val_proba)
         mlflow.log_metric("optimal_threshold", optimal_threshold)
         mlflow.log_metric("f1_threshold", f1_threshold)
 
         # Step 4 — Evaluate on held-out TEST set with threshold from val
-        y_test_proba = pipeline.predict_proba(X_test)[:, 1]
+        y_test_proba = calibrated_pipeline.predict_proba(X_test)[:, 1]
         test_metrics = evaluate(y_test.values, y_test_proba, optimal_threshold)
         _log_params_to_mlflow(pipeline, cfg)
         _log_metrics_to_mlflow(test_metrics, prefix="test_")
@@ -221,9 +230,11 @@ def run_training_experiment(
         print_evaluation_report(test_metrics, split_name="Test")
 
         # Step 5 — Log model artifact with signature
-        signature = infer_signature(X_train, pipeline.predict_proba(X_train)[:, 1])
+        signature = infer_signature(
+            X_train, calibrated_pipeline.predict_proba(X_train)[:, 1]
+        )
         mlflow.sklearn.log_model(
-            sk_model=pipeline,
+            sk_model=calibrated_pipeline,
             artifact_path="model",
             signature=signature,
             input_example=X_train.head(5),

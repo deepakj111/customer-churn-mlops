@@ -34,6 +34,7 @@ from sklearn.ensemble import (
     GradientBoostingClassifier,
     RandomForestClassifier,
 )
+from sklearn.feature_selection import SelectFromModel
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
@@ -136,8 +137,8 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
                 constructor arguments exactly.
 
     Returns:
-        Unfitted sklearn Pipeline with three named steps:
-            'feature_engineering', 'preprocessor', 'classifier'
+        Unfitted sklearn Pipeline with named steps:
+            'feature_engineering', 'preprocessor', 'feature_selection', 'classifier'
     """
     cfg = get_config()
     algo_name = getattr(cfg.model, "algorithm", "lightgbm").lower()
@@ -157,6 +158,12 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
     classifier_class = ALGORITHM_MAP[algo_name]
     classifier = classifier_class(**model_params)
 
+    # Automated feature selection step
+    # Uses a basic LGBM to drop zero-importance or very low-importance features
+    selector = SelectFromModel(
+        estimator=LGBMClassifier(random_state=42), threshold="0.5*mean"
+    )
+
     pipeline = Pipeline(
         steps=[
             (
@@ -166,6 +173,10 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
             (
                 "preprocessor",
                 get_preprocessor(),
+            ),
+            (
+                "feature_selection",
+                selector,
             ),
             (
                 "classifier",
@@ -174,7 +185,10 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
         ]
     )
 
-    logger.info("Pipeline built — %s initialized.", classifier_class.__name__)
+    logger.info(
+        "Pipeline built — %s initialized with Feature Selection.",
+        classifier_class.__name__,
+    )
 
     return pipeline
 
@@ -183,18 +197,20 @@ def build_baseline_pipeline(classifier) -> Pipeline:
     """
     Build a sklearn Pipeline for baseline and ensemble experimentation.
 
-    Uses the identical feature engineering and preprocessing as build_pipeline(),
-    but accepts any sklearn-compatible estimator. This ensures every algorithm
-    comparison in notebooks 03 and 04 is a pure algorithm comparison —
-    same features, same preprocessing, different model.
+    Uses the identical feature engineering, preprocessing, and selection
+    as build_pipeline(), but accepts any sklearn-compatible estimator.
+    This ensures pure algorithm comparisons.
 
     Args:
         classifier: Any unfitted sklearn-compatible estimator.
 
     Returns:
-        Unfitted sklearn Pipeline with three named steps:
-            'feature_engineering', 'preprocessor', 'classifier'
+        Unfitted sklearn Pipeline.
     """
+    selector = SelectFromModel(
+        estimator=LGBMClassifier(random_state=42), threshold="0.5*mean"
+    )
+
     pipeline = Pipeline(
         steps=[
             (
@@ -204,6 +220,10 @@ def build_baseline_pipeline(classifier) -> Pipeline:
             (
                 "preprocessor",
                 get_preprocessor(),
+            ),
+            (
+                "feature_selection",
+                selector,
             ),
             (
                 "classifier",

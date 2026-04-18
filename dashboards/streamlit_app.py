@@ -263,8 +263,14 @@ st.markdown(
     '<h1 class="main-header">📊 Customer Churn Predictor</h1>', unsafe_allow_html=True
 )
 
-tab_predict, tab_batch, tab_performance, tab_business = st.tabs(
-    ["🎯 Predict", "📋 Batch Analysis", "📈 Model Performance", "💰 Business Impact"]
+tab_predict, tab_batch, tab_performance, tab_drift, tab_business = st.tabs(
+    [
+        "🎯 Predict",
+        "📋 Batch Analysis",
+        "📈 Model Performance",
+        "📉 Data Drift",
+        "💰 Business Impact",
+    ]
 )
 
 # ---------------------------------------------------------------------------
@@ -433,6 +439,14 @@ with tab_predict:
                     </div>""",
                     unsafe_allow_html=True,
                 )
+
+            # Display SHAP explanation if available
+            if result.get("explanation"):
+                st.markdown("---")
+                st.markdown("#### 🧠 Top Churn Drivers")
+                for feat, val in result["explanation"].items():
+                    direction = "⬆️ Increases Risk" if val > 0 else "⬇️ Decreases Risk"
+                    st.markdown(f"- **{feat}**: {val:+.4f} ({direction})")
 
             # Recommendation based on risk tier
             st.markdown("---")
@@ -633,7 +647,88 @@ with tab_performance:
 
 
 # ---------------------------------------------------------------------------
-# Tab 4: Business Impact
+# Tab 4: Visual Data Drift
+# ---------------------------------------------------------------------------
+
+with tab_drift:
+    st.markdown("### Data Drift Monitoring")
+    st.caption("Visualizing the latest data drift report from Evidently AI.")
+
+    drift_report_path = REPORTS_DIR / "drift_report.json"
+    if drift_report_path.exists():
+        try:
+            import json
+
+            with open(drift_report_path, "r") as f:
+                drift_data = json.load(f)
+
+            metrics = drift_data.get("metrics", [])
+            dataset_drift = None
+            drift_table = None
+
+            for m in metrics:
+                if m.get("metric") == "DatasetDriftMetric":
+                    dataset_drift = m.get("result", {})
+                elif m.get("metric") == "DataDriftTable":
+                    drift_table = m.get("result", {}).get("drift_by_columns", {})
+
+            if dataset_drift:
+                st.markdown("#### Dataset Drift Summary")
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    is_drifted = dataset_drift.get("dataset_drift", False)
+                    status_color = "#ef4444" if is_drifted else "#10b981"
+                    status_text = "DRIFT DETECTED" if is_drifted else "ALL CLEAR"
+                    st.markdown(
+                        f"<h3 style='color: {status_color};'>{status_text}</h3>",
+                        unsafe_allow_html=True,
+                    )
+                with col_d2:
+                    st.metric(
+                        "Drifted Features",
+                        f"{dataset_drift.get('number_of_drifted_features', 0)} / {dataset_drift.get('number_of_columns', 0)}",
+                    )
+
+            if drift_table:
+                df_drift = pd.DataFrame(
+                    [
+                        {
+                            "Feature": feat,
+                            "Drift Score": round(float(info.get("drift_score", 0)), 4),
+                            "Drift Detected": info.get("drift_detected", False),
+                            "Stat Test": info.get("stat_test_name", ""),
+                        }
+                        for feat, info in drift_table.items()
+                    ]
+                )
+                df_drift = df_drift.sort_values(
+                    "Drift Score", ascending=False
+                ).reset_index(drop=True)
+
+                st.markdown("#### Feature-Level Drift")
+
+                def color_boolean(val):
+                    color = "red" if val is True else "green" if val is False else ""
+                    return f"color: {color}; font-weight: bold;"
+
+                st.dataframe(
+                    df_drift.style.map(color_boolean, subset=["Drift Detected"]),
+                    use_container_width=True,
+                    height=500,
+                )
+            else:
+                st.info("No feature-level drift table found in the report.")
+
+        except Exception as e:
+            st.error(f"Failed to load drift report: {e}")
+    else:
+        st.info(
+            "📭 No drift report found. Run `scripts/generate_drift_report.py` to generate one."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tab 5: Business Impact
 # ---------------------------------------------------------------------------
 
 with tab_business:
