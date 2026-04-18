@@ -329,6 +329,7 @@ st.markdown(
     tab_predict,
     tab_batch,
     tab_performance,
+    tab_benchmark,
     tab_drift,
     tab_uplift,
     tab_business,
@@ -338,6 +339,7 @@ st.markdown(
         "🎯 Predict (Manual Form)",
         "📋 Batch Analysis",
         "📈 Model Performance",
+        "⚖️ Benchmarking",
         "📉 Data Drift",
         "🏥 Causal Uplift",
         "💰 Business Impact",
@@ -805,6 +807,81 @@ with tab_performance:
                 st.markdown(f"**{title}**")
                 st.image(str(img_path), use_container_width=True)
 
+
+# ---------------------------------------------------------------------------
+# Tab Benchmarking: Model Comparison
+# ---------------------------------------------------------------------------
+with tab_benchmark:
+    st.markdown("### ⚖️ Advanced Model Benchmarking")
+    st.caption(
+        "Comparing calibrated LightGBM against cutting-edge Tabular Deep Learning via 3-Fold Stratified Cross-Validation."
+    )
+
+    benchmark_path = REPORTS_DIR / "benchmark_report.json"
+    if benchmark_path.exists():
+        import json
+
+        import pandas as pd
+
+        with open(benchmark_path, "r") as f:
+            bm_data = json.load(f)
+
+        # Convert dictionary to DataFrame for easier plotting
+        bm_records = []
+        for model_name, metrics in bm_data.items():
+            record = {"Model": model_name}
+            record.update(metrics)
+            bm_records.append(record)
+
+        df_bm = pd.DataFrame(bm_records)
+
+        # Display the highlights
+        best_auc = df_bm.loc[df_bm["ROC-AUC"].idxmax()]
+        fastest_inf = df_bm.loc[df_bm["Latency_ms_per_sample"].idxmin()]
+
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            st.markdown(
+                f"""<div class="metric-card" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%);">
+                    <h3>Highest ROC-AUC</h3>
+                    <h2>{best_auc["Model"]}</h2>
+                    <h4 style="font-size:0.9rem; margin-top:5px;">AUC: {best_auc["ROC-AUC"]:.4f}</h4>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+        with col_b2:
+            st.markdown(
+                f"""<div class="metric-card" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
+                    <h3>Fastest Inference</h3>
+                    <h2>{fastest_inf["Model"]}</h2>
+                    <h4 style="font-size:0.9rem; margin-top:5px;">{fastest_inf["Latency_ms_per_sample"]:.2f} ms / sample</h4>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("---")
+        st.markdown("#### Full Benchmarking Telemetry")
+
+        # Format the dataframe nicely
+        st.dataframe(
+            df_bm.style.highlight_max(
+                subset=["ROC-AUC", "F1"], color="lightgreen", axis=0
+            ).highlight_min(
+                subset=["Brier", "Latency_ms_per_sample"], color="lightgreen", axis=0
+            ),
+            use_container_width=True,
+        )
+
+        st.markdown(
+            "> **Note on TabPFN / Deep Learning:** While Neural models adapt well to general structural topologies, "
+            "gradient-boosted trees (like our LightGBM) still heavily dominate standard tabular data structures natively, "
+            "usually coupling maximum predictive performance with the lowest latency boundaries."
+        )
+
+    else:
+        st.info(
+            "📭 No benchmarking report found. Run `poetry run python scripts/run_benchmarks.py` to populate."
+        )
 
 # ---------------------------------------------------------------------------
 # Tab 4: Visual Data Drift

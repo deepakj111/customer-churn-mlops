@@ -67,3 +67,9 @@ catboost_info/
 # Generated notebook reports
 reports/*.png
 reports/*.html
+
+# Deep Learning / PyTorch Tabular
+lightning_logs/
+.pt_tmp/
+models/ft_transformer/
+*.ckpt
