@@ -58,6 +58,9 @@ Thumbs.db
 # DVC
 /tmp
 
+# Databases (e.g. Feast online store)
+*.db
+
 # CatBoost
 catboost_info/
 

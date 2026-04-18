@@ -209,6 +209,27 @@ async def add_request_id(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
+# Fast & Lazy Resources
+# ---------------------------------------------------------------------------
+
+_feature_store = None
+
+
+def get_feature_store():
+    """Lazily load the Feast Feature Store to prevent startup delays."""
+    global _feature_store
+    if _feature_store is None:
+        from pathlib import Path
+
+        from feast import FeatureStore
+
+        # The feast repo is located at src/features/feast_repo
+        repo_path = Path(__file__).resolve().parent.parent / "features" / "feast_repo"
+        _feature_store = FeatureStore(repo_path=str(repo_path))
+    return _feature_store
+
+
+# ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
 
@@ -596,4 +617,111 @@ async def predict_batch(
         raise HTTPException(
             status_code=500,
             detail=f"Batch prediction failed: {str(e)}",
+        )
+
+
+@app.get(
+    "/predict/customer/{customer_id}",
+    response_model=PredictionResponse,
+    tags=["Predictions"],
+    summary="Online Feature Store Prediction (Feast)",
+    description=(
+        "Fetch a customer's real-time raw features from the Feast online store "
+        "and immediately route them to the cached prediction pipeline."
+    ),
+)
+async def predict_customer(
+    customer_id: str,
+    request: Request,
+) -> PredictionResponse:
+    request_id = request.state.request_id
+
+    logger.info(
+        "Feast prediction request received for %s [request_id=%s]",
+        customer_id,
+        request_id,
+    )
+    PREDICTION_REQUEST_COUNT.labels(endpoint="predict_online").inc()
+    start_time = time.time()
+
+    try:
+        store = get_feature_store()
+
+        # Request these 19 specific features for the customer entity
+        feature_vector = store.get_online_features(
+            features=[
+                "customer_raw_features:gender",
+                "customer_raw_features:SeniorCitizen",
+                "customer_raw_features:Partner",
+                "customer_raw_features:Dependents",
+                "customer_raw_features:tenure",
+                "customer_raw_features:PhoneService",
+                "customer_raw_features:MultipleLines",
+                "customer_raw_features:InternetService",
+                "customer_raw_features:OnlineSecurity",
+                "customer_raw_features:OnlineBackup",
+                "customer_raw_features:DeviceProtection",
+                "customer_raw_features:TechSupport",
+                "customer_raw_features:StreamingTV",
+                "customer_raw_features:StreamingMovies",
+                "customer_raw_features:Contract",
+                "customer_raw_features:PaperlessBilling",
+                "customer_raw_features:PaymentMethod",
+                "customer_raw_features:MonthlyCharges",
+                "customer_raw_features:TotalCharges",
+            ],
+            entity_rows=[{"customerID": customer_id}],
+        ).to_dict()
+
+        # If 'tenure' is None, it means the entity was not found in the online store
+        if feature_vector.get("tenure", [None])[0] is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Customer '{customer_id}' not found in online feature store.",
+            )
+
+        # Build DataFrame directly from the online features dict
+        df = pd.DataFrame(feature_vector)
+
+        # Feast injects the entity keys into the response, drop customerID
+        if "customerID" in df.columns:
+            df = df.drop(columns=["customerID"])
+
+        # Standardise SeniorCitizen cast precisely like _customer_to_dataframe
+        df["SeniorCitizen"] = df["SeniorCitizen"].astype(str)
+
+        # Pass the DataFrame to the pipeline + SHAP logic
+        response = _predict_single(df, request_id)
+
+        PREDICTION_LATENCY.labels(endpoint="predict_online").observe(
+            time.time() - start_time
+        )
+        CHURN_PROBABILITY_HISTOGRAM.observe(response.churn_probability)
+
+        logger.info(
+            "Feast prediction complete [request_id=%s] for %s: probability=%.4f",
+            request_id,
+            customer_id,
+            response.churn_probability,
+        )
+
+        return response
+
+    except HTTPException:
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict_online").inc()
+        raise
+    except RuntimeError as e:
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict_online").inc()
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict_online").inc()
+        logger.error(
+            "Feast prediction failed [request_id=%s]: %s",
+            request_id,
+            e,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Feast prediction failed: {str(e)}",
         )

@@ -45,6 +45,12 @@ drift-report:   ## Generate latest drift monitoring report
 save-reference:   ## Save training data as drift reference snapshot
 	poetry run python scripts/save_reference_data.py
 
+feast-apply:   ## Apply Feast Feature Store registry
+	cd src/features/feast_repo && poetry run feast apply
+
+feast-materialize:   ## Materialize Feast online store
+	cd src/features/feast_repo && poetry run feast materialize-incremental $$(date -Iseconds)
+
 docker-build:   ## Build all Docker images
 	docker compose -f docker/docker-compose.yml build
 

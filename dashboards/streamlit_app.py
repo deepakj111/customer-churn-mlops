@@ -160,6 +160,32 @@ def check_api_health() -> dict | None:
     return None
 
 
+def predict_customer_feast(customer_id: str) -> dict | None:
+    """Call the /predict/customer/{customer_id} endpoint and return the response."""
+    try:
+        response = requests.get(
+            f"{API_URL}/predict/customer/{customer_id}",
+            timeout=30,
+        )
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            st.error(f"Customer '{customer_id}' not found in the Feast online store.")
+            return None
+        else:
+            st.error(f"Prediction failed: {response.status_code} — {response.text}")
+            return None
+    except requests.exceptions.ConnectionError:
+        st.error(
+            f"Cannot connect to the prediction API at {API_URL}. "
+            "Start the API with `make serve` or `docker compose up`."
+        )
+        return None
+    except Exception as e:
+        st.error(f"Prediction error: {e}")
+        return None
+
+
 def get_risk_badge(risk_tier: str) -> str:
     """Return HTML badge for the risk tier."""
     tier_map = {
@@ -263,9 +289,10 @@ st.markdown(
     '<h1 class="main-header">📊 Customer Churn Predictor</h1>', unsafe_allow_html=True
 )
 
-tab_predict, tab_batch, tab_performance, tab_drift, tab_business = st.tabs(
+tab_feast, tab_predict, tab_batch, tab_performance, tab_drift, tab_business = st.tabs(
     [
-        "🎯 Predict",
+        "⚡ Feast Online Predict",
+        "🎯 Predict (Manual Form)",
         "📋 Batch Analysis",
         "📈 Model Performance",
         "📉 Data Drift",
@@ -274,7 +301,92 @@ tab_predict, tab_batch, tab_performance, tab_drift, tab_business = st.tabs(
 )
 
 # ---------------------------------------------------------------------------
-# Tab 1: Single Customer Prediction
+# Tab 0: Feast Online Store Prediction
+# ---------------------------------------------------------------------------
+
+with tab_feast:
+    st.markdown("### Bleeding-Edge 2026 MLOps: Feast Feature Store Integration")
+    st.caption(
+        "Enter a `CustomerID` to fetch their real-time features from Feast SQLite online store in milliseconds, then immediately predict churn."
+    )
+
+    col_f1, col_f2 = st.columns([1, 2])
+    with col_f1:
+        fe_customer_id = st.text_input(
+            "Customer ID",
+            value="7590-VHVEG",
+            help="Try: 7590-VHVEG, 5575-GNVDE, or 3668-QPYBK",
+        )
+        predict_btn = st.button(
+            "⚡ Fetch & Predict", type="primary", use_container_width=True
+        )
+
+    if predict_btn and fe_customer_id:
+        with st.spinner("Fetching from Feast and predicting..."):
+            result = predict_customer_feast(fe_customer_id)
+
+        if result is not None:
+            st.markdown("---")
+            st.markdown(f"### Prediction Result for `{fe_customer_id}`")
+
+            # Display metrics in cards
+            r1, r2, r3, r4 = st.columns(4)
+            with r1:
+                proba = result["churn_probability"]
+                st.markdown(
+                    f"""<div class="metric-card">
+                        <h3>Churn Probability</h3>
+                        <h2>{proba:.1%}</h2>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with r2:
+                risk = result["risk_tier"]
+                st.markdown(
+                    f"""<div class="metric-card">
+                        <h3>Risk Tier</h3>
+                        <h2>{get_risk_badge(risk)}</h2>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with r3:
+                churn = "YES 🔴" if result["will_churn"] else "NO 🟢"
+                st.markdown(
+                    f"""<div class="metric-card">
+                        <h3>Will Churn?</h3>
+                        <h2>{churn}</h2>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with r4:
+                threshold = result["threshold_used"]
+                st.markdown(
+                    f"""<div class="metric-card">
+                        <h3>Threshold Used</h3>
+                        <h2>{threshold:.2f}</h2>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Display SHAP explanation if available
+            if result.get("explanation"):
+                st.markdown("---")
+                st.markdown("#### 🧠 Top Churn Drivers")
+                for feat, val in result["explanation"].items():
+                    direction = "⬆️ Increases Risk" if val > 0 else "⬇️ Decreases Risk"
+                    st.markdown(f"- **{feat}**: {val:+.4f} ({direction})")
+
+            # Recommendation based on risk tier
+            st.markdown("---")
+            if risk == "HIGH_RISK":
+                st.error("⚠️ **Immediate Action Required**")
+            elif risk == "MEDIUM_RISK":
+                st.warning("🔔 **Monitor Closely**")
+            else:
+                st.success("✅ **Low Risk**")
+
+# ---------------------------------------------------------------------------
+# Tab 1: Single Customer Prediction (Manual Form)
 # ---------------------------------------------------------------------------
 
 with tab_predict:
