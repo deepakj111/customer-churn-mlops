@@ -38,7 +38,9 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 from src.data.ingest import load_for_training
 from src.data.preprocess import run_preprocessing
 from src.data.validate import validate_raw_data
+from src.models.calibration_diagnostics import compute_calibration_report
 from src.models.evaluate import evaluate, print_evaluation_report
+from src.models.fairness_audit import run_fairness_audit
 from src.models.pipeline import build_pipeline
 from src.models.threshold import find_cost_optimal_threshold, find_f1_optimal_threshold
 from src.utils.config_loader import get_config
@@ -227,6 +229,39 @@ def run_training_experiment(
         _log_metrics_to_mlflow(test_metrics, prefix="test_")
 
         print_evaluation_report(test_metrics, split_name="Test")
+
+        # Step 4.5 — Calibration Diagnostics (pre vs. post isotonic)
+        # Measures whether calibration actually improved probability quality.
+        # ECE < 0.05 is considered well-calibrated (Naeini et al., 2015).
+        y_test_proba_raw = pipeline.predict_proba(X_test)[:, 1]
+        cal_report = compute_calibration_report(
+            y_true=y_test.values,
+            y_prob_before=y_test_proba_raw,
+            y_prob_after=y_test_proba,
+        )
+        _log_metrics_to_mlflow(cal_report.to_dict(), prefix="")
+        logger.info("\n%s", cal_report.summary())
+
+        # Step 4.6 — Fairness / Bias Audit
+        # Audits demographic parity and equalized odds across protected
+        # attributes. Uses the 4/5ths rule (EEOC) for disparate impact.
+        y_test_pred = (y_test_proba >= optimal_threshold).astype(int)
+        sensitive_features = {}
+        if "gender" in X_test.columns:
+            sensitive_features["gender"] = X_test["gender"].values
+        if "SeniorCitizen" in X_test.columns:
+            sensitive_features["SeniorCitizen"] = X_test["SeniorCitizen"].values
+
+        if sensitive_features:
+            fairness_report = run_fairness_audit(
+                y_true=y_test.values,
+                y_pred=y_test_pred,
+                y_prob=y_test_proba,
+                sensitive_features=sensitive_features,
+            )
+            _log_metrics_to_mlflow(fairness_report.to_dict(), prefix="")
+            mlflow.set_tag("fairness_overall", str(fairness_report.overall_fair))
+            logger.info("\n%s", fairness_report.summary())
 
         # Step 5 — Log model artifact with signature
         signature = infer_signature(

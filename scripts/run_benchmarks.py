@@ -29,6 +29,7 @@ from src.data.validate import validate_raw_data
 from src.features.feature_store import engineer_features
 from src.models.ft_transformer_wrapper import FTTransformerWrapper
 from src.models.pipeline import build_pipeline, get_preprocessor
+from src.models.statistical_comparison import compare_models
 from src.models.tabpfn_wrapper import TabPFNWrapper
 from src.utils.logging import get_logger
 
@@ -134,6 +135,7 @@ def evaluate_model(
         "F1": round(float(np.mean(f1_scores)), 4),
         "Brier": round(float(np.mean(brier_scores)), 4),
         "Latency_ms_per_sample": round(float(np.mean(inference_times)), 4),
+        "fold_auc_scores": [round(s, 4) for s in auc_scores],
     }
 
     logger.info(
@@ -174,8 +176,7 @@ def run_all_benchmarks():
         logger.error("Benchmarking failed: %s", e)
         raise e
 
-    # Save artifact
-    # Sort models by AUC
+    # Sort models by AUC for the final report
     sorted_results = {
         name: metrics
         for name, metrics in sorted(
@@ -183,6 +184,28 @@ def run_all_benchmarks():
         )
     }
 
+    # Statistical model comparison (Nadeau-Bengio corrected t-test)
+    # Determines whether AUC differences are statistically significant,
+    # not just random noise from the particular train/test splits.
+    fold_scores = {
+        name: np.array(metrics["fold_auc_scores"]) for name, metrics in results.items()
+    }
+    # Approximate n_train and n_test from fold proportions
+    n_total = len(X)
+    n_test_approx = n_total // FOLDS
+    n_train_approx = n_total - n_test_approx
+
+    if len(fold_scores) >= 2:
+        comparison_report = compare_models(
+            fold_scores=fold_scores,
+            n_train=n_train_approx,
+            n_test=n_test_approx,
+            metric_name="ROC-AUC",
+        )
+        logger.info("\n%s", comparison_report.summary())
+        sorted_results["statistical_comparison"] = comparison_report.to_dict()
+
+    # Save artifact
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)
     out_path = reports_dir / "benchmark_report.json"
