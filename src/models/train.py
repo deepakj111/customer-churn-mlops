@@ -32,6 +32,7 @@ import mlflow.sklearn
 import pandas as pd
 from dotenv import load_dotenv
 from mlflow.models import infer_signature
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 
 from src.data.ingest import load_for_training
@@ -204,8 +205,6 @@ def run_training_experiment(
         pipeline.fit(X_train, y_train)
 
         # Step 2.5 — Calibrate probabilities on VALIDATION set
-        from sklearn.calibration import CalibratedClassifierCV
-
         logger.info("Calibrating pipeline on validation set...")
         calibrated_pipeline = CalibratedClassifierCV(
             estimator=pipeline, method="isotonic", cv="prefit"

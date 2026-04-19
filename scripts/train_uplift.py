@@ -12,6 +12,7 @@ import pandas as pd
 
 from src.data.ingest import load_for_training
 from src.data.preprocess import preprocess
+from src.data.validate import validate_raw_data
 from src.features.feature_store import engineer_features
 from src.models.uplift import ChurnUpliftModel
 from src.utils.logging import get_logger
@@ -24,13 +25,14 @@ def run_uplift_experiment():
 
     # 1. Load and process data
     df_raw = load_for_training()
-    df_clean = preprocess(df_raw)
+    validated_df = validate_raw_data(df_raw)
+    df_clean = preprocess(validated_df)
 
     # In causal inference, confounding factors are a big problem.
     # Example: Customers without internet cannot get Tech Support.
     # We must filter to only those eligible for the treatment.
     df_eligible = df_clean[df_clean["InternetService"] != "No"].copy()
-    logger.info(f"Filtered to {len(df_eligible)} internet-eligible customers.")
+    logger.info("Filtered to %d internet-eligible customers.", len(df_eligible))
 
     # Cast TotalCharges to numeric since the sklearn pipeline is bypassed
     if "TotalCharges" in df_eligible.columns:
@@ -88,7 +90,7 @@ def run_uplift_experiment():
         for k in segment_counts.keys()
     }
 
-    logger.info(f"Segmentation Results:\n{json.dumps(segment_counts, indent=2)}")
+    logger.info("Segmentation Results:\n%s", json.dumps(segment_counts, indent=2))
 
     # 7. Save Report
     reports_dir = Path("reports")

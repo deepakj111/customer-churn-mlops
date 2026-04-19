@@ -29,7 +29,7 @@ Public API:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import numpy as np
@@ -470,7 +470,7 @@ class DriftDetector:
             logger.info(summary)
 
         report = DriftReport(
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             reference_shape=self._reference_df.shape,
             current_shape=current_df.shape,
             numerical_drift=numerical_drift,

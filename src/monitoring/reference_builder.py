@@ -25,7 +25,7 @@ Public API:
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, cast
 
@@ -87,7 +87,7 @@ def build_reference(
 
     # Save metadata
     metadata = {
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "model_version": model_version,
         "n_rows": len(X),
         "n_features": len(X.columns),

@@ -179,11 +179,19 @@ def _train_local_model() -> None:
     pipeline = build_pipeline()
     pipeline.fit(X_train, y_train)
 
-    # Find optimal threshold on validation set
-    y_val_proba = pipeline.predict_proba(X_val)[:, 1]
+    # Calibrate probabilities on validation set (matches production pipeline)
+    from sklearn.calibration import CalibratedClassifierCV
+
+    calibrated_pipeline = CalibratedClassifierCV(
+        estimator=pipeline, method="isotonic", cv="prefit"
+    )
+    calibrated_pipeline.fit(X_val, y_val)
+
+    # Find optimal threshold on validation set using calibrated probabilities
+    y_val_proba = calibrated_pipeline.predict_proba(X_val)[:, 1]
     threshold = find_cost_optimal_threshold(y_val.values, y_val_proba)
 
-    _pipeline = pipeline
+    _pipeline = calibrated_pipeline
     _threshold = threshold
     _model_info = {
         "model_name": cfg.model.registered_model_name,

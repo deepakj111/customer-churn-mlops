@@ -11,6 +11,8 @@ build/
 repo_code.py
 all_python_files.txt
 repo_code.txt
+repo_code*
+repo_export.txt
 
 .ipynb
 

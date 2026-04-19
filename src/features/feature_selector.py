@@ -43,7 +43,9 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from src.utils.logging import get_logger
 
-warnings.filterwarnings("ignore")
+# NOTE: Warnings are suppressed locally inside specific functions below
+# (e.g., _cv_prauc) rather than globally, to avoid masking genuine issues
+# in other modules that import this one.
 
 logger = get_logger(__name__)
 
@@ -539,11 +541,21 @@ def run_full_selection(
                 ),
             ]
         )
-        return float(
-            cross_val_score(
-                pipe, X_enc, y, cv=cv, scoring="average_precision", n_jobs=1
-            ).mean()
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                category=FutureWarning,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message=".*lbfgs.*|.*ConvergenceWarning.*",
+                category=UserWarning,
+            )
+            return float(
+                cross_val_score(
+                    pipe, X_enc, y, cv=cv, scoring="average_precision", n_jobs=1
+                ).mean()
+            )
 
     cv_all = _cv_prauc(X_filtered)
     cv_sel = _cv_prauc(X_engineered[selected]) if selected else 0.0
