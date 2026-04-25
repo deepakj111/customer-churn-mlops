@@ -233,10 +233,18 @@ class CustomerFeatures(BaseModel):
         if self.tenure > 0:
             max_plausible = self.MonthlyCharges * (self.tenure + 1) * 1.5
             if self.TotalCharges > max_plausible:
-                # Don't block the request — log a warning via the response.
-                # The model can still handle it, but the prediction may be
-                # unreliable. We flag it in the response metadata.
-                pass
+                import logging
+
+                _validator_logger = logging.getLogger(__name__)
+                _validator_logger.warning(
+                    "TotalCharges (%.2f) exceeds plausible maximum (%.2f) "
+                    "for tenure=%d, MonthlyCharges=%.2f. "
+                    "Prediction may be unreliable.",
+                    self.TotalCharges,
+                    max_plausible,
+                    self.tenure,
+                    self.MonthlyCharges,
+                )
         return self
 
     model_config = {

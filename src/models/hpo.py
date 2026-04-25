@@ -229,9 +229,11 @@ def run_hpo(
             }
         )
 
+    best_value = best_trial.value if best_trial.value is not None else 0.0
+
     result = HPOResult(
         best_params=best_trial.params,
-        best_score=round(best_trial.value, 4),
+        best_score=round(best_value, 4),
         n_trials=n_trials,
         n_pruned=len(
             [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]

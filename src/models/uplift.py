@@ -50,7 +50,9 @@ class ChurnUpliftModel:
             T: Treatment array (binary 0/1).
             y: Outcome array (binary 0/1 — 1 means churned).
         """
-        logger.info(f"Fitting T-Learner on {len(X)} samples with {T.sum()} treated...")
+        logger.info(
+            "Fitting T-Learner on %d samples with %d treated...", len(X), T.sum()
+        )
         # econml expects Y, T, X
         self.model.fit(Y=y.values, T=T.values, X=X.values)
         self.is_fitted = True

@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -45,9 +45,9 @@ REFERENCE_METADATA_PATH = Path("data/reference/reference_metadata.json")
 def build_reference(
     X: pd.DataFrame,
     y: pd.Series,
-    predictions: Optional[np.ndarray] = None,
+    predictions: np.ndarray | None = None,
     model_version: str = "unknown",
-    output_dir: Optional[Path] = None,
+    output_dir: Path | None = None,
 ) -> Path:
     """
     Build and save the reference dataset for drift monitoring.
@@ -107,8 +107,8 @@ def build_reference(
 
 
 def load_reference(
-    data_dir: Optional[Path] = None,
-) -> tuple[pd.DataFrame, Optional[np.ndarray]]:
+    data_dir: Path | None = None,
+) -> tuple[pd.DataFrame, np.ndarray | None]:
     """
     Load the reference dataset from disk.
 
@@ -146,7 +146,7 @@ def load_reference(
 
 
 def get_reference_metadata(
-    data_dir: Optional[Path] = None,
+    data_dir: Path | None = None,
 ) -> dict[str, Any]:
     """
     Load reference dataset metadata.

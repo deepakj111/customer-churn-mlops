@@ -62,6 +62,41 @@ ALGORITHM_MAP = {
 }
 
 
+def _build_pipeline_steps(classifier) -> list[tuple]:
+    """Build the shared pipeline step list used by both public pipeline factories.
+
+    Centralises the 4-step construction so that build_pipeline() and
+    build_baseline_pipeline() always stay in sync.
+
+    Steps:
+        1. feature_engineering — stateless FunctionTransformer
+        2. preprocessor       — ColumnTransformer (OHE + scaler + passthrough)
+        3. feature_selection   — SelectFromModel (LGBM-based)
+        4. classifier          — the provided estimator
+    """
+    selector = SelectFromModel(
+        estimator=LGBMClassifier(random_state=42), threshold="0.5*mean"
+    )
+    return [
+        (
+            "feature_engineering",
+            FunctionTransformer(engineer_features, validate=False),
+        ),
+        (
+            "preprocessor",
+            get_preprocessor(),
+        ),
+        (
+            "feature_selection",
+            selector,
+        ),
+        (
+            "classifier",
+            classifier,
+        ),
+    ]
+
+
 def get_preprocessor() -> ColumnTransformer:
     """
     Build the ColumnTransformer that routes features to the correct encoder.
@@ -158,32 +193,7 @@ def build_pipeline(params: dict | None = None) -> Pipeline:
     classifier_class = ALGORITHM_MAP[algo_name]
     classifier = classifier_class(**model_params)
 
-    # Automated feature selection step
-    # Uses a basic LGBM to drop zero-importance or very low-importance features
-    selector = SelectFromModel(
-        estimator=LGBMClassifier(random_state=42), threshold="0.5*mean"
-    )
-
-    pipeline = Pipeline(
-        steps=[
-            (
-                "feature_engineering",
-                FunctionTransformer(engineer_features, validate=False),
-            ),
-            (
-                "preprocessor",
-                get_preprocessor(),
-            ),
-            (
-                "feature_selection",
-                selector,
-            ),
-            (
-                "classifier",
-                classifier,
-            ),
-        ]
-    )
+    pipeline = Pipeline(steps=_build_pipeline_steps(classifier))
 
     logger.info(
         "Pipeline built — %s initialized with Feature Selection.",
@@ -207,30 +217,7 @@ def build_baseline_pipeline(classifier) -> Pipeline:
     Returns:
         Unfitted sklearn Pipeline.
     """
-    selector = SelectFromModel(
-        estimator=LGBMClassifier(random_state=42), threshold="0.5*mean"
-    )
-
-    pipeline = Pipeline(
-        steps=[
-            (
-                "feature_engineering",
-                FunctionTransformer(engineer_features, validate=False),
-            ),
-            (
-                "preprocessor",
-                get_preprocessor(),
-            ),
-            (
-                "feature_selection",
-                selector,
-            ),
-            (
-                "classifier",
-                classifier,
-            ),
-        ]
-    )
+    pipeline = Pipeline(steps=_build_pipeline_steps(classifier))
 
     logger.debug(
         "Baseline pipeline built — classifier: %s",

@@ -10,8 +10,10 @@ This wrapper utilizes the PyTorch Tabular framework mapping to create
 an sklearn-compatible Estimator.
 """
 
+from __future__ import annotations
+
 import os
-from typing import Any, List
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -41,8 +43,8 @@ class FTTransformerWrapper(BaseEstimator, ClassifierMixin):
 
     def __init__(
         self,
-        categorical_cols: List[str] = None,
-        numerical_cols: List[str] = None,
+        categorical_cols: list[str] | None = None,
+        numerical_cols: list[str] | None = None,
         epochs: int = 15,
         batch_size: int = 256,
         learning_rate: float = 1e-3,
@@ -152,6 +154,7 @@ class FTTransformerWrapper(BaseEstimator, ClassifierMixin):
             len(self.numerical_cols),
         )
 
+        assert self.tabular_model is not None, "TabularModel not initialized"
         self.tabular_model.fit(train=train_df)
         self.classes_ = np.array([0, 1])
         return self
@@ -161,6 +164,7 @@ class FTTransformerWrapper(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X: Any) -> Any:
         df = self._ensure_dataframe(X)
+        assert self.tabular_model is not None, "Must call fit() before predict"
         pred_df = self.tabular_model.predict(df, ret_logits=False)
 
         preds = np.zeros((len(df), 2))

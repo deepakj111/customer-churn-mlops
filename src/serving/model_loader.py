@@ -32,7 +32,7 @@ Public API:
 from __future__ import annotations
 
 import threading
-from typing import Any, Optional
+from typing import Any
 
 from src.utils.logging import get_logger
 
@@ -43,7 +43,7 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 _lock = threading.Lock()
-_pipeline: Optional[Any] = None  # fitted sklearn Pipeline
+_pipeline: Any | None = None  # fitted sklearn Pipeline
 _threshold: float = 0.5  # cost-optimal threshold
 _model_info: dict[str, Any] = {}  # metadata dict
 

@@ -175,7 +175,7 @@ def run_training_experiment(
 
     if run_name is None:
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_name = f"lgbm_churn_{ts}"
+        run_name = f"{cfg.model.algorithm}_churn_{ts}"
 
     with mlflow.start_run(run_name=run_name) as run:
         run_id = run.info.run_id

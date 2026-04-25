@@ -67,6 +67,73 @@ _DEFAULT_N_BINS = 10
 
 
 # ---------------------------------------------------------------------------
+# Shared binning helper — DRY extraction
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _BinStat:
+    """Per-bin statistics for calibration analysis."""
+
+    bin_index: int
+    lower: float
+    upper: float
+    midpoint: float
+    count: int
+    accuracy: float  # fraction of positives (observed frequency)
+    confidence: float  # mean predicted probability
+
+
+def _compute_bin_stats(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    n_bins: int = _DEFAULT_N_BINS,
+) -> list[_BinStat]:
+    """Compute per-bin accuracy and confidence for calibration analysis.
+
+    Centralises the equal-width binning logic used by ECE, MCE,
+    Brier decomposition, and the reliability diagram builder.
+
+    Each bin spans (lower, upper] except the first which spans [lower, upper]
+    so that predictions of exactly 0.0 are included.
+
+    Args:
+        y_true: Ground truth binary labels (0 or 1).
+        y_prob: Predicted probabilities for the positive class.
+        n_bins: Number of equal-width bins.
+
+    Returns:
+        List of _BinStat for non-empty bins.
+    """
+    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
+    stats: list[_BinStat] = []
+
+    for i in range(n_bins):
+        mask = (y_prob > bin_edges[i]) & (y_prob <= bin_edges[i + 1])
+        # Include the lower boundary for the first bin
+        if i == 0:
+            mask = (y_prob >= bin_edges[i]) & (y_prob <= bin_edges[i + 1])
+
+        n_in_bin = int(mask.sum())
+        if n_in_bin == 0:
+            continue
+
+        stats.append(
+            _BinStat(
+                bin_index=i,
+                lower=float(bin_edges[i]),
+                upper=float(bin_edges[i + 1]),
+                midpoint=float((bin_edges[i] + bin_edges[i + 1]) / 2),
+                count=n_in_bin,
+                accuracy=float(y_true[mask].mean()),
+                confidence=float(y_prob[mask].mean()),
+            )
+        )
+
+    return stats
+
+
+# ---------------------------------------------------------------------------
 # Core calibration metrics
 # ---------------------------------------------------------------------------
 
@@ -93,23 +160,9 @@ def compute_ece(
     Returns:
         ECE as a float in [0, 1]. Lower is better.
     """
-    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
-    ece = 0.0
-
-    for i in range(n_bins):
-        mask = (y_prob > bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-        # Include the lower boundary for the first bin
-        if i == 0:
-            mask = (y_prob >= bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-
-        n_in_bin = mask.sum()
-        if n_in_bin == 0:
-            continue
-
-        accuracy_in_bin = y_true[mask].mean()
-        confidence_in_bin = y_prob[mask].mean()
-        ece += (n_in_bin / len(y_true)) * abs(accuracy_in_bin - confidence_in_bin)
-
+    bins = _compute_bin_stats(y_true, y_prob, n_bins)
+    n_total = len(y_true)
+    ece = sum((b.count / n_total) * abs(b.accuracy - b.confidence) for b in bins)
     return round(float(ece), 6)
 
 
@@ -135,23 +188,10 @@ def compute_mce(
     Returns:
         MCE as a float in [0, 1]. Lower is better.
     """
-    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
-    max_gap = 0.0
-
-    for i in range(n_bins):
-        mask = (y_prob > bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-        if i == 0:
-            mask = (y_prob >= bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-
-        n_in_bin = mask.sum()
-        if n_in_bin == 0:
-            continue
-
-        accuracy_in_bin = y_true[mask].mean()
-        confidence_in_bin = y_prob[mask].mean()
-        gap = abs(accuracy_in_bin - confidence_in_bin)
-        max_gap = max(max_gap, gap)
-
+    bins = _compute_bin_stats(y_true, y_prob, n_bins)
+    if not bins:
+        return 0.0
+    max_gap = max(abs(b.accuracy - b.confidence) for b in bins)
     return round(float(max_gap), 6)
 
 
@@ -191,26 +231,12 @@ def compute_brier_decomposition(
     base_rate = y_true.mean()
     uncertainty = base_rate * (1.0 - base_rate)
 
-    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
-    reliability = 0.0
-    resolution = 0.0
+    bins = _compute_bin_stats(y_true, y_prob, n_bins)
     n_total = len(y_true)
-
-    for i in range(n_bins):
-        mask = (y_prob > bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-        if i == 0:
-            mask = (y_prob >= bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-
-        n_in_bin = mask.sum()
-        if n_in_bin == 0:
-            continue
-
-        acc_b = y_true[mask].mean()
-        conf_b = y_prob[mask].mean()
-        weight = n_in_bin / n_total
-
-        reliability += weight * (conf_b - acc_b) ** 2
-        resolution += weight * (acc_b - base_rate) ** 2
+    reliability = sum(
+        (b.count / n_total) * (b.confidence - b.accuracy) ** 2 for b in bins
+    )
+    resolution = sum((b.count / n_total) * (b.accuracy - base_rate) ** 2 for b in bins)
 
     brier = float(np.mean((y_prob - y_true) ** 2))
 
@@ -249,31 +275,13 @@ def build_reliability_diagram_data(
         Dict with keys: bin_midpoints, fraction_positives,
         mean_predicted, bin_counts, n_total.
     """
-    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
-    bin_midpoints = []
-    fraction_positives = []
-    mean_predicted = []
-    bin_counts = []
-
-    for i in range(n_bins):
-        mask = (y_prob > bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-        if i == 0:
-            mask = (y_prob >= bin_edges[i]) & (y_prob <= bin_edges[i + 1])
-
-        n_in_bin = mask.sum()
-        if n_in_bin == 0:
-            continue
-
-        bin_midpoints.append(round(float((bin_edges[i] + bin_edges[i + 1]) / 2), 3))
-        fraction_positives.append(round(float(y_true[mask].mean()), 4))
-        mean_predicted.append(round(float(y_prob[mask].mean()), 4))
-        bin_counts.append(int(n_in_bin))
+    bins = _compute_bin_stats(y_true, y_prob, n_bins)
 
     return {
-        "bin_midpoints": bin_midpoints,
-        "fraction_positives": fraction_positives,
-        "mean_predicted": mean_predicted,
-        "bin_counts": bin_counts,
+        "bin_midpoints": [round(b.midpoint, 3) for b in bins],
+        "fraction_positives": [round(b.accuracy, 4) for b in bins],
+        "mean_predicted": [round(b.confidence, 4) for b in bins],
+        "bin_counts": [b.count for b in bins],
         "n_total": len(y_true),
     }
 

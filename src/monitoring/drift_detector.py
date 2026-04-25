@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -83,7 +83,7 @@ class DriftReport:
     current_shape: tuple[int, int]
     numerical_drift: list[FeatureDriftResult]
     categorical_drift: list[FeatureDriftResult]
-    prediction_drift_score: Optional[float]
+    prediction_drift_score: float | None
     prediction_is_drifted: bool
     overall_drift_detected: bool
     drifted_features: list[str]
@@ -132,8 +132,8 @@ class DriftDetector:
     def __init__(
         self,
         reference_df: pd.DataFrame,
-        numerical_features: Optional[list[str]] = None,
-        categorical_features: Optional[list[str]] = None,
+        numerical_features: list[str] | None = None,
+        categorical_features: list[str] | None = None,
     ) -> None:
         """
         Initialize the drift detector with a reference dataset.
@@ -188,7 +188,7 @@ class DriftDetector:
 
         Quantile-based binning ensures that each bin has roughly equal
         representation in the reference data, which makes PSI robust to
-        skewed distributions (e.g., TotalCharges).
+        distributional shifts (e.g., TotalCharges).
 
         Args:
             reference: Reference (training) feature values.
@@ -405,8 +405,8 @@ class DriftDetector:
     def generate_report(
         self,
         current_df: pd.DataFrame,
-        reference_proba: Optional[np.ndarray] = None,
-        current_proba: Optional[np.ndarray] = None,
+        reference_proba: np.ndarray | None = None,
+        current_proba: np.ndarray | None = None,
     ) -> DriftReport:
         """
         Run all drift checks and produce a comprehensive report.
@@ -430,7 +430,7 @@ class DriftDetector:
         categorical_drift = self.compute_categorical_drift(current_df)
 
         # Prediction drift (optional — requires probabilities)
-        pred_drift_score: Optional[float] = None
+        pred_drift_score: float | None = None
         pred_is_drifted = False
 
         if reference_proba is not None and current_proba is not None:

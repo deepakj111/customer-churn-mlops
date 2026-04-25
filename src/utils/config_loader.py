@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -52,7 +52,7 @@ class ModelConfig:
     algorithm: str
     champion_stage: str
     registered_model_name: str = "customer-churn-lgbm"  # <-- add default
-    hyperparameters: Dict[str, Any] = field(default_factory=dict)
+    hyperparameters: dict[str, Any] = field(default_factory=dict)
     cost_matrix: CostMatrixConfig = field(default_factory=CostMatrixConfig)
     risk_tiers: RiskTiersConfig = field(default_factory=RiskTiersConfig)
     performance_gates: PerformanceGatesConfig = field(
@@ -66,10 +66,10 @@ class FeatureConfig:
 
     target_column: str
     customer_id_column: str
-    numerical_features: List[str] = field(default_factory=list)
-    categorical_features: List[str] = field(default_factory=list)
-    features_to_drop: List[str] = field(default_factory=list)
-    engineered_features: List[str] = field(default_factory=list)
+    numerical_features: list[str] = field(default_factory=list)
+    categorical_features: list[str] = field(default_factory=list)
+    features_to_drop: list[str] = field(default_factory=list)
+    engineered_features: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -110,12 +110,12 @@ class ConfigLoader:
 
     def __init__(self, config_dir: str = "configs") -> None:
         self._config_dir = Path(config_dir)
-        self._model_config: Optional[ModelConfig] = None
-        self._feature_config: Optional[FeatureConfig] = None
-        self._training_config: Optional[TrainingConfig] = None
-        self._monitoring_config: Optional[MonitoringConfig] = None
+        self._model_config: ModelConfig | None = None
+        self._feature_config: FeatureConfig | None = None
+        self._training_config: TrainingConfig | None = None
+        self._monitoring_config: MonitoringConfig | None = None
 
-    def _load_yaml(self, filename: str) -> Dict[str, Any]:
+    def _load_yaml(self, filename: str) -> dict[str, Any]:
         path = self._config_dir / filename
         if not path.exists():
             raise FileNotFoundError(
@@ -172,7 +172,7 @@ class ConfigLoader:
 # Module-level singleton
 # ---------------------------------------------------------------------------
 
-_config_loader: Optional[ConfigLoader] = None
+_config_loader: ConfigLoader | None = None
 
 
 def get_config(config_dir: str = "configs") -> ConfigLoader:

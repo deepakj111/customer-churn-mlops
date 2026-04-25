@@ -158,9 +158,9 @@ def evaluate(
     Returns:
         Flat dict combining all ML and business metrics.
     """
-    y_pred = (y_pred_proba >= threshold).astype(int)
-
     ml_metrics = compute_ml_metrics(y_true, y_pred_proba, threshold)
+
+    y_pred = (y_pred_proba >= threshold).astype(int)
     business_metrics = compute_business_metrics(y_true, y_pred)
 
     combined = {**ml_metrics, **business_metrics}
