@@ -68,6 +68,12 @@ src/models/train.py           ← Training orchestration
 src/models/evaluate.py        ← ML + business metrics
 src/models/threshold.py       ← Cost-optimal threshold tuning
         │
+        ├──➔ Advanced Modules (Optional / Analytical):
+        │      ├── conformal.py             ← 90% confidence sets
+        │      ├── fairness_audit.py        ← Demographic Parity / Equalized Odds
+        │      ├── calibration_diagnostics.py ← ECE / Brier Score
+        │      └── hpo.py                   ← Optuna Bayesian Optimization
+        │
         ▼
 src/serving/schemas.py        ← Pydantic v2 request/response models
 src/serving/model_loader.py   ← Thread-safe lazy loading
@@ -219,6 +225,19 @@ df["charge_percentile"] = df["MonthlyCharges"].rank(pct=True)  # WRONG in produc
 - Business users can adjust cost matrix without touching code
 - New deployments can use different thresholds without rebuilding containers
 - Type safety catches misconfiguration at load time, not at runtime
+
+### 7. Advanced ML Robustness Checks
+
+**Decision:** Post-training, the model is subjected to Fairness Auditing, Calibration Diagnostics, and Conformal Prediction.
+**Why:** Modern AI engineering requires strict validation beyond simple accuracy:
+- **Fairness (`fairness_audit.py`):** Ensures we do not systematically withhold retention offers from protected groups (e.g., SeniorCitizens) by measuring Equalized Odds and Demographic Parity.
+- **Calibration (`calibration_diagnostics.py`):** A probability output of 0.8 must actually correspond to an 80% empirical chance of churn. We measure Expected Calibration Error (ECE) and Brier Score, automatically applying Isotonic Regression if the raw LGBM distribution is skewed.
+- **Conformal Prediction (`conformal.py`):** Provides a statistically guaranteed margin of error (e.g. 90% confidence sets).
+
+### 8. Feature Store Ready (Feast)
+
+**Decision:** Maintain an offline/online feature registry using `Feast`.
+**Why:** While local training computes features in-memory, scaling to enterprise production requires decoupling feature computation from inference. The system includes a fully configured `feast_repo` that can materialize features to an online store (e.g. Redis), enabling low-latency API reads where the client only passes a `customer_id` instead of the full payload.
 
 ---
 

@@ -44,6 +44,18 @@ A **production-grade Machine Learning Operations pipeline** that predicts custom
 - **Cost-matrix threshold optimization** — minimizes total business cost ($500/missed churner vs $20/false alarm)
 - **3-way stratified data split** (Train 70% / Validation 10% / Test 20%) to prevent data leakage
 
+### 📈 Model Performance & Business ROI
+- **ROC-AUC:** `0.8225` | **PR-AUC:** `0.6071` | **Recall:** `0.9920`
+- **Cost-matrix optimization:** Saved **$170,140** over a baseline 'no-model' approach on the test set, by setting a mathematically optimal threshold of `0.03` based on $500/false negative and $20/false positive costs.
+
+### 🧪 Advanced MLOps & Modeling
+- **Conformal Prediction:** Generates 90% confidence sets for predictions.
+- **Bayesian HPO:** Automated tuning via `Optuna`.
+- **Fairness Auditing:** Tracks Equalized Odds and Demographic Parity across protected groups.
+- **Calibration Diagnostics:** Calculates Expected Calibration Error (ECE) and Brier Score, applying isotonic regression when needed.
+- **Uplift Modeling:** Evaluates true causal effect of retention interventions.
+- **Feature Store Integration:** Built-in `feast` hooks for online/offline feature serving.
+
 ### 🚀 Production Serving
 - **FastAPI REST API** with single and batch prediction endpoints, Pydantic v2 validation, and OpenAPI docs
 - **Thread-safe lazy model loading** with automatic fallback chain (MLflow Registry → Local Training)
@@ -281,6 +293,8 @@ All commands are available via the `Makefile`. Run `make help` to see all option
 | `make docker-up` | Start full Docker Compose stack |
 | `make docker-down` | Stop all Docker containers |
 | `make clean` | Remove Python cache files |
+| `make feast-apply` | Apply Feast Feature Store registry |
+| `make feast-materialize` | Materialize Feast online store for low-latency serving |
 
 ### Training Pipeline
 
