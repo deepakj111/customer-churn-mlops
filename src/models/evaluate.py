@@ -35,7 +35,7 @@ def compute_ml_metrics(
     y_true: np.ndarray,
     y_pred_proba: np.ndarray,
     threshold: float = 0.5,
-) -> dict:
+) -> dict[str, float]:
     """
     Compute standard ML classification metrics.
 
@@ -78,7 +78,7 @@ def compute_ml_metrics(
 def compute_business_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-) -> dict:
+) -> dict[str, int | float]:
     """
     Compute business-oriented metrics using the cost matrix from config.
 
@@ -142,7 +142,7 @@ def evaluate(
     y_true: np.ndarray,
     y_pred_proba: np.ndarray,
     threshold: float = 0.5,
-) -> dict:
+) -> dict[str, int | float]:
     """
     Combine ML metrics and business metrics into one evaluation dict.
 

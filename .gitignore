@@ -14,7 +14,8 @@ repo_code.txt
 repo_code*
 repo_export.txt
 
-.ipynb
+*.ipynb
+htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/

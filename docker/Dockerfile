@@ -37,8 +37,7 @@ COPY pyproject.toml poetry.lock ./
 # Export production dependencies to a plain requirements.txt.
 # --without dev: exclude pytest, black, jupyter, etc.
 # --no-interaction: don't prompt for anything.
-RUN poetry lock && \
-    poetry export \
+RUN poetry export \
     --format requirements.txt \
     --output /build/requirements.txt \
     --no-interaction

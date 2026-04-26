@@ -62,7 +62,7 @@ ALGORITHM_MAP = {
 }
 
 
-def _build_pipeline_steps(classifier) -> list[tuple]:
+def _build_pipeline_steps(classifier) -> list[tuple[str, object]]:
     """Build the shared pipeline step list used by both public pipeline factories.
 
     Centralises the 4-step construction so that build_pipeline() and

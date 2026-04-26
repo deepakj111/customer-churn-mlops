@@ -32,7 +32,6 @@ dependencies = [
     "dvc[s3] (>=3.67.1,<4.0.0)",
     "seaborn (>=0.13.2,<0.14.0)",
     "matplotlib (>=3.10.8,<4.0.0)",
-    "ipykernel (>=7.2.0,<8.0.0)",
     "ipywidgets (>=8.1.8,<9.0.0)",
     "optuna (>=4.8.0,<5.0.0)",
     "feast (>=0.62.0,<0.63.0)",
@@ -89,17 +88,6 @@ multi_line_output = 3
 line_length = 88
 skip_glob = ["notebooks/*"]
 
-
-[tool.flake8]
-max-line-length = 88
-extend-ignore = ["E203", "W503"]
-exclude = [
-    ".git",
-    ".venv",
-    "__pycache__",
-    ".pytest_cache",
-    "notebooks",
-]
 
 [tool.mypy]
 python_version = "3.11"

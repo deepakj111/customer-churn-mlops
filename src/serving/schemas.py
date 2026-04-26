@@ -29,9 +29,12 @@ Public API:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+from src.utils.logging import get_logger
+
+_validator_logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Enums — constrain string fields to known valid values
@@ -233,9 +236,6 @@ class CustomerFeatures(BaseModel):
         if self.tenure > 0:
             max_plausible = self.MonthlyCharges * (self.tenure + 1) * 1.5
             if self.TotalCharges > max_plausible:
-                import logging
-
-                _validator_logger = logging.getLogger(__name__)
                 _validator_logger.warning(
                     "TotalCharges (%.2f) exceeds plausible maximum (%.2f) "
                     "for tenure=%d, MonthlyCharges=%.2f. "
@@ -330,12 +330,12 @@ class PredictionResponse(BaseModel):
         description="Decision threshold used for the binary prediction.",
         examples=[0.34],
     )
-    explanation: Optional[dict[str, float]] = Field(
+    explanation: dict[str, float] | None = Field(
         default=None,
         description="Top features driving the prediction, mapped to their SHAP values.",
         examples=[{"is_month_to_month": 0.45, "TotalCharges": -0.12, "tenure": 0.08}],
     )
-    conformal_prediction: Optional[dict[str, dict]] = Field(
+    conformal_prediction: dict[str, dict] | None = Field(
         default=None,
         description=(
             "Conformal prediction sets at 90%/95% "
@@ -361,7 +361,7 @@ class PredictionResponse(BaseModel):
             }
         ],
     )
-    request_id: Optional[str] = Field(
+    request_id: str | None = Field(
         default=None,
         description="Unique request identifier for traceability.",
     )
@@ -405,7 +405,7 @@ class BatchPredictionResponse(BaseModel):
         description="Average churn probability across the batch.",
         examples=[0.42],
     )
-    request_id: Optional[str] = Field(
+    request_id: str | None = Field(
         default=None,
         description="Unique request identifier for the batch.",
     )
@@ -439,7 +439,7 @@ class ModelInfoResponse(BaseModel):
         description="Registered model name.",
         examples=["customer-churn-lgbm"],
     )
-    model_version: Optional[str] = Field(
+    model_version: str | None = Field(
         default=None,
         description="Model version from the registry.",
         examples=["1"],
@@ -459,7 +459,7 @@ class ModelInfoResponse(BaseModel):
         description="Number of input features expected.",
         examples=[19],
     )
-    mlflow_run_id: Optional[str] = Field(
+    mlflow_run_id: str | None = Field(
         default=None,
         description="MLflow run ID that produced this model.",
     )
@@ -478,7 +478,7 @@ class ErrorDetail(BaseModel):
         description="Human-readable error description.",
         examples=["MonthlyCharges must be greater than 0."],
     )
-    request_id: Optional[str] = Field(
+    request_id: str | None = Field(
         default=None,
         description="Request identifier for support reference.",
     )

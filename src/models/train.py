@@ -26,6 +26,7 @@ Public API:
 
 import datetime
 import os
+from typing import Any
 
 import mlflow
 import mlflow.sklearn
@@ -105,7 +106,7 @@ def _log_metrics_to_mlflow(metrics: dict, prefix: str = "") -> None:
 def run_training_experiment(
     params: dict | None = None,
     run_name: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Run a full training experiment and log everything to MLflow.
 
@@ -174,7 +175,7 @@ def run_training_experiment(
     pipeline = build_pipeline(params)
 
     if run_name is None:
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
         run_name = f"{cfg.model.algorithm}_churn_{ts}"
 
     with mlflow.start_run(run_name=run_name) as run:

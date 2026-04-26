@@ -7,10 +7,13 @@ Usage:
     make train
 """
 
+import sys
+
 from src.models.train import run_training_experiment
 
 
-def main():
+def main() -> None:
+    """Run a manual training experiment and print all metrics."""
     metrics = run_training_experiment(run_name="manual-training-run")
     print("Training finished")
     for k, v in metrics.items():
@@ -18,4 +21,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print(f"Training failed: {exc}", file=sys.stderr)
+        sys.exit(1)

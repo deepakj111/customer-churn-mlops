@@ -38,7 +38,7 @@ from __future__ import annotations
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 import numpy as np
 import pandas as pd
@@ -190,7 +190,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 @app.middleware("http")
-async def add_request_id(request: Request, call_next):
+async def add_request_id(request: Request, call_next) -> Response:
     """
     Inject a unique request_id into every request.
 
@@ -212,10 +212,10 @@ async def add_request_id(request: Request, call_next):
 # Fast & Lazy Resources
 # ---------------------------------------------------------------------------
 
-_feature_store = None
+_feature_store: Any | None = None
 
 
-def get_feature_store():
+def get_feature_store() -> Any:
     """Lazily load the Feast Feature Store to prevent startup delays."""
     global _feature_store
     if _feature_store is None:
@@ -229,11 +229,11 @@ def get_feature_store():
     return _feature_store
 
 
-_conformal_predictor = None
-_conformal_available = None
+_conformal_predictor: Any | None = None
+_conformal_available: bool | None = None
 
 
-def get_conformal_predictor():
+def get_conformal_predictor() -> Any | None:
     """Lazily load the conformal predictor (returns None if not trained)."""
     global _conformal_predictor, _conformal_available
     if _conformal_available is None:
@@ -459,7 +459,7 @@ async def model_info() -> ModelInfoResponse:
     summary="Prometheus metrics",
     description="Returns API and model metrics scraped by Prometheus.",
 )
-async def get_metrics():
+async def get_metrics() -> Response:
     """Return Prometheus metrics."""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 

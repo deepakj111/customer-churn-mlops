@@ -8,7 +8,7 @@ repos:
         exclude: ^notebooks/
       - id: check-yaml
       - id: check-added-large-files
-        args: ['--maxkb=1000']   # Block files > 500KB from being committed
+        args: ['--maxkb=1000']   # Block files > 1MB from being committed
       - id: check-merge-conflict
 
   - repo: https://github.com/psf/black
