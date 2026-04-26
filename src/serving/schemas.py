@@ -330,7 +330,7 @@ class PredictionResponse(BaseModel):
         description="Decision threshold used for the binary prediction.",
         examples=[0.34],
     )
-    explanation: dict[str, float] | None = Field(
+    explainability: dict[str, float] | None = Field(
         default=None,
         description="Top features driving the prediction, mapped to their SHAP values.",
         examples=[{"is_month_to_month": 0.45, "TotalCharges": -0.12, "tenure": 0.08}],

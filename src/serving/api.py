@@ -372,7 +372,7 @@ def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
     risk_tier = RiskTier(get_risk_tier(proba))
 
     explanations = _explain_predictions(pipeline, df)
-    explanation = explanations[0] if explanations else None
+    explainability = explanations[0] if explanations else None
 
     # Conformal prediction (uncertainty quantification)
     conformal_result = None
@@ -388,7 +388,7 @@ def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
         risk_tier=risk_tier,
         will_churn=will_churn,
         threshold_used=round(threshold, 4),
-        explanation=explanation,
+        explainability=explainability,
         conformal_prediction=conformal_result,
         request_id=request_id,
     )
