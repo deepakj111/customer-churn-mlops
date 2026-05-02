@@ -315,6 +315,13 @@ with st.sidebar:
         """
     )
 
+    st.markdown("---")
+    st.markdown("## 📚 Documentation")
+    st.markdown(f"- [Open API Docs]({API_URL}/docs)")
+    st.markdown(
+        "- [GitHub Repository](https://github.com/deepakj111/customer-churn-mlops)"
+    )
+
 
 # ---------------------------------------------------------------------------
 # Main content
@@ -333,6 +340,7 @@ st.markdown(
     tab_drift,
     tab_uplift,
     tab_business,
+    tab_docs,
 ) = st.tabs(
     [
         "⚡ Feast Online Predict",
@@ -343,6 +351,7 @@ st.markdown(
         "📉 Data Drift",
         "🏥 Causal Uplift",
         "💰 Business Impact",
+        "📖 Architecture & Docs",
     ]
 )
 
@@ -1184,3 +1193,80 @@ with tab_business:
     if biz_img.exists():
         st.markdown("#### Training Run Business Impact")
         st.image(str(biz_img), use_container_width=True)
+
+# ---------------------------------------------------------------------------
+# Tab 7: Architecture & Documentation
+# ---------------------------------------------------------------------------
+
+with tab_docs:
+    st.markdown("### 📖 System Architecture & MLOps Pipeline")
+    st.caption(
+        "End-to-End overview of the Machine Learning lifecycle and deployment strategy."
+    )
+
+    st.markdown("#### 🏗️ Architecture Diagram")
+    st.code(
+        """
+                         ┌─────────────────────────────────────────┐
+                         │            GitHub Actions CI/CD         │
+                         │   Lint → Test (281) → Docker Build &    │
+                         │   Push Image to Container Registry      │
+                         └───────────────┬─────────────────────────┘
+                                         │
+    ┌────────────┐    ┌──────────┐    ┌──┴───────┐    ┌──────────────┐
+    │  Raw Data  │───▶│ Validate │───▶│ Feature  │───▶│   Train +    │
+    │  (DVC)     │    │ (Pandera)│    │  Store   │    │  Optimize    │
+    └────────────┘    └──────────┘    │(28 feats)│    │  (MLflow)    │
+                                      └──────────┘    └──────┬───────┘
+                                                             │
+                                                    ┌────────┴────────┐
+                                                    │  sklearn.Pipeline│
+                                                    │ (FeatEng→Prep→  │
+                                                    │  Model)         │
+                                                    └────────┬────────┘
+                                                             │
+         ┌─────────────┐    ┌──────────────┐    ┌────────────┴────────┐
+         │  Streamlit   │◀──│  FastAPI      │◀──│  Model Loader       │
+         │  Dashboard   │   │  /predict     │   │  (MLflow→Local      │
+         │  (port 8501) │   │  (port 8000)  │   │   fallback)         │
+         └─────────────┘    └──────┬───────┘    └─────────────────────┘
+                                   │
+                    ┌──────────────┴───────────────┐
+                    │          Prometheus          │
+                    │        (Scrapes /metrics)    │
+                    └──────────────┬───────────────┘
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │           Grafana            │
+                    │    (Live Traffic Dashboards) │
+                    └──────────────────────────────┘
+        """
+    )
+
+    col_docs1, col_docs2 = st.columns(2)
+    with col_docs1:
+        st.markdown("#### 🚀 Serving Layer (FastAPI)")
+        st.markdown(
+            f"- **REST API Docs (Swagger)**: [{API_URL}/docs]({API_URL}/docs)\\n"
+            f"- **Health Check**: [{API_URL}/health]({API_URL}/health)\\n"
+            f"- **Metrics (Prometheus)**: [{API_URL}/metrics]({API_URL}/metrics)"
+        )
+        st.markdown("#### 🛠️ MLOps Tooling")
+        st.markdown(
+            "- **MLflow**: Track experiments, log parameters and metrics.\\n"
+            "- **DVC**: Version control for datasets.\\n"
+            "- **Prometheus & Grafana**: API monitoring and traffic analysis.\\n"
+            "- **Docker Compose**: Seamless multi-container orchestration."
+        )
+
+    with col_docs2:
+        st.markdown("#### 🧪 Quality & CI/CD")
+        st.markdown(
+            "- **Testing**: 281 tests with pytest (Unit, Integration, Data Validation).\\n"
+            "- **Data Validation**: Pandera schemas enforce data contracts.\\n"
+            "- **GitHub Actions**: Automated linting (Black, Flake8), type-checking (mypy), and testing on PR."
+        )
+        st.markdown("#### 🔗 Repository")
+        st.markdown(
+            "- [GitHub: deepakj111/customer-churn-mlops](https://github.com/deepakj111/customer-churn-mlops)"
+        )
