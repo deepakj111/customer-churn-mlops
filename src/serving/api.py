@@ -38,7 +38,7 @@ from __future__ import annotations
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Awaitable, Callable
 
 import numpy as np
 import pandas as pd
@@ -190,7 +190,9 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 @app.middleware("http")
-async def add_request_id(request: Request, call_next) -> Response:
+async def add_request_id(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """
     Inject a unique request_id into every request.
 
@@ -600,7 +602,7 @@ async def predict_batch(
                     risk_tier=risk_tier,
                     will_churn=proba_float >= threshold,
                     threshold_used=round(threshold, 4),
-                    explanation=explanation,
+                    explainability=explanation,
                     request_id=request_id,
                 )
             )
