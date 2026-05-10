@@ -7,7 +7,7 @@ from src.data.ingest import DEFAULT_RAW_PATH, load_for_training, load_raw_data
 
 
 @pytest.fixture
-def sample_csv(tmp_path) -> Path:
+def sample_csv(tmp_path: Path) -> Path:
     """Write a minimal valid Telco-shaped CSV to a temp directory."""
     csv_content = (
         "customerID,gender,SeniorCitizen,Partner,Dependents,tenure,"
