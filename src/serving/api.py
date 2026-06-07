@@ -591,11 +591,21 @@ async def predict_batch(
 
         from src.models.threshold import get_risk_tier
 
+        conformal = get_conformal_predictor()
+
         predictions = []
         for i, proba in enumerate(probas):
             proba_float = float(proba)
             risk_tier = RiskTier(get_risk_tier(proba_float))
             explanation = explanations[i] if explanations else None
+
+            conformal_result = None
+            if conformal is not None:
+                try:
+                    conformal_result = conformal.predict_single(df.iloc[[i]])
+                except Exception as e:
+                    logger.warning("Conformal prediction failed: %s", e)
+
             predictions.append(
                 PredictionResponse(
                     churn_probability=round(proba_float, 4),
@@ -603,6 +613,7 @@ async def predict_batch(
                     will_churn=proba_float >= threshold,
                     threshold_used=round(threshold, 4),
                     explainability=explanation,
+                    conformal_prediction=conformal_result,
                     request_id=request_id,
                 )
             )
