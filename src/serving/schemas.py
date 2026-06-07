@@ -29,6 +29,7 @@ Public API:
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -335,7 +336,7 @@ class PredictionResponse(BaseModel):
         description="Top features driving the prediction, mapped to their SHAP values.",
         examples=[{"is_month_to_month": 0.45, "TotalCharges": -0.12, "tenure": 0.08}],
     )
-    conformal_prediction: dict[str, dict] | None = Field(
+    conformal_prediction: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Conformal prediction sets at 90%/95% "
