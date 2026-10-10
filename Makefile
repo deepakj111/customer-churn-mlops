@@ -31,7 +31,22 @@ test-integration:   ## Run only integration tests
 	poetry run pytest tests/integration/
 
 train:   ## Run full training pipeline
-	poetry run python main.py
+	poetry run python main.py train
+
+pipeline-train:   ## Run automated Prefect production training pipeline
+	poetry run python main.py train
+
+pipeline-retrain:   ## Run drift-triggered champion-challenger retraining pipeline
+	poetry run python main.py retrain
+
+uplift-train:   ## Run Causal Uplift (CATE) modeling experiment
+	poetry run python main.py uplift
+
+benchmark:   ## Run statistical benchmark comparing Tabular models
+	poetry run python main.py benchmark
+
+notebooks-exec:   ## Re-execute all research notebooks and update rendered outputs
+	poetry run python -c "import subprocess, glob; [subprocess.run(['jupyter', 'nbconvert', '--to', 'notebook', '--execute', '--inplace', nb]) for nb in sorted(glob.glob('notebooks/*.ipynb'))]"
 
 serve:   ## Start the FastAPI server locally
 	poetry run uvicorn src.serving.api:app --host 0.0.0.0 --port 8000 --reload

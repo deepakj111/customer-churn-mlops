@@ -58,7 +58,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY dashboards/ ./dashboards/
 COPY src/ ./src/
 COPY configs/ ./configs/
-COPY reports/ ./reports/
+COPY results/ ./results/
 
 # Non-root user
 RUN useradd --create-home --shell /bin/bash appuser

@@ -39,8 +39,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Defaults to localhost for standalone local development.
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
-# Report images directory
-REPORTS_DIR = Path("reports")
+# Unified results directory
+RESULTS_DIR = Path("results")
+
+
+def resolve_report_image(filename: str) -> Path:
+    """Finds image in results/figures/ subdirectories or results/ root."""
+    for candidate in [
+        RESULTS_DIR / "figures" / "evaluation" / filename,
+        RESULTS_DIR / "figures" / "eda" / filename,
+        RESULTS_DIR / "figures" / "features" / filename,
+        RESULTS_DIR / "figures" / "benchmarks" / filename,
+        RESULTS_DIR / filename,
+    ]:
+        if candidate.exists():
+            return candidate
+    return RESULTS_DIR / filename
+
+
+def resolve_metrics_file(metric_filename: str) -> Path:
+    """Finds metrics in results/metrics/."""
+    candidate = RESULTS_DIR / "metrics" / metric_filename
+    if candidate.exists():
+        return candidate
+    return RESULTS_DIR / "metrics" / metric_filename
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +382,7 @@ st.markdown(
 # ---------------------------------------------------------------------------
 
 with tab_feast:
-    st.markdown("### Bleeding-Edge 2026 MLOps: Feast Feature Store Integration")
+    st.markdown("### Feast Feature Store Integration")
     st.caption(
         "Enter a `CustomerID` to fetch their real-time features from Feast SQLite online store in milliseconds, then immediately predict churn."
     )
@@ -784,7 +806,7 @@ with tab_performance:
 
     found_any = False
     for title, filename in report_images.items():
-        img_path = REPORTS_DIR / filename
+        img_path = resolve_report_image(filename)
         if img_path.exists():
             found_any = True
             st.markdown(f"#### {title}")
@@ -793,8 +815,8 @@ with tab_performance:
 
     if not found_any:
         st.info(
-            "📭 No report images found in `reports/`. "
-            "Run the training notebooks (notebooks/03c_champion_evaluation.py) "
+            "📭 No report images found in `results/figures/`. "
+            "Run the production training pipeline (`poetry run python main.py train`) "
             "to generate performance visualizations."
         )
 
@@ -811,7 +833,7 @@ with tab_performance:
         }
 
         for title, filename in eda_images.items():
-            img_path = REPORTS_DIR / filename
+            img_path = resolve_report_image(filename)
             if img_path.exists():
                 st.markdown(f"**{title}**")
                 st.image(str(img_path), use_container_width=True)
@@ -823,10 +845,10 @@ with tab_performance:
 with tab_benchmark:
     st.markdown("### ⚖️ Advanced Model Benchmarking")
     st.caption(
-        "Comparing calibrated LightGBM against cutting-edge Tabular Deep Learning via 3-Fold Stratified Cross-Validation."
+        "Comparing calibrated LightGBM against Tabular Deep Learning via 3-Fold Stratified Cross-Validation."
     )
 
-    benchmark_path = REPORTS_DIR / "benchmark_report.json"
+    benchmark_path = resolve_metrics_file("benchmark_results.json")
     if benchmark_path.exists():
         import json
 
@@ -900,7 +922,7 @@ with tab_drift:
     st.markdown("### Data Drift Monitoring")
     st.caption("Visualizing the latest data drift report from Evidently AI.")
 
-    drift_report_path = REPORTS_DIR / "drift_report.json"
+    drift_report_path = resolve_metrics_file("drift_results.json")
     if drift_report_path.exists():
         try:
             import json
@@ -983,7 +1005,7 @@ with tab_uplift:
         "Moving beyond 'Who will churn' to 'Who will change their mind if we intervene?'. Models the Conditional Average Treatment Effect (CATE)."
     )
 
-    uplift_report_path = REPORTS_DIR / "uplift_report.json"
+    uplift_report_path = resolve_metrics_file("uplift_results.json")
     if uplift_report_path.exists():
         try:
             import json
@@ -1189,7 +1211,7 @@ with tab_business:
             st.markdown(f"- **Total model cost: ${model_cost:,.0f}**")
 
     # Display business impact image if available
-    biz_img = REPORTS_DIR / "business_impact.png"
+    biz_img = resolve_report_image("business_impact.png")
     if biz_img.exists():
         st.markdown("#### Training Run Business Impact")
         st.image(str(biz_img), use_container_width=True)

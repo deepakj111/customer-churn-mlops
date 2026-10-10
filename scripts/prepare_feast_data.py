@@ -7,7 +7,9 @@ import pandas as pd
 def prepare_data():
     project_root = Path(__file__).parent.parent
     raw_csv = project_root / "data" / "raw" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
-    output_parquet = project_root / "data" / "raw" / "customer_features.parquet"
+    output_parquet = project_root / "data" / "features" / "customer_features.parquet"
+    output_parquet.parent.mkdir(parents=True, exist_ok=True)
+    raw_fallback = project_root / "data" / "raw" / "customer_features.parquet"
 
     # Read raw data
     df = pd.read_csv(raw_csv)
@@ -25,6 +27,8 @@ def prepare_data():
 
     # Save to parquet. Parquet is the standard offline store format for Feast.
     df.to_parquet(output_parquet, index=False)
+    # Mirror to data/raw for backward compatibility
+    df.to_parquet(raw_fallback, index=False)
     print(f"✅ Prepared Feast offline data at {output_parquet}")
     print(f"   Shape: {df.shape}")
 

@@ -9,7 +9,7 @@ Why Parquet?
     - Preserves dtypes exactly (unlike CSV which loses int vs. float)
     - Column-oriented: fast partial reads (only load monitored features)
     - 3-5x smaller than CSV for this dataset
-    - Industry standard for ML data storage
+    - Standard format for ML data storage
 
 The reference dataset includes:
     - All feature columns (after preprocessing and feature engineering)

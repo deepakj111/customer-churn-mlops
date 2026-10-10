@@ -1,0 +1,16 @@
+{
+    "FT-Transformer": {
+        "ROC-AUC": 0.8423,
+        "ROC-AUC_std": 0.0069,
+        "F1": 0.5755,
+        "Brier": 0.1369,
+        "Latency_ms_per_sample": 1.0321
+    },
+    "LightGBM": {
+        "ROC-AUC": 0.8314,
+        "ROC-AUC_std": 0.0074,
+        "F1": 0.6073,
+        "Brier": 0.157,
+        "Latency_ms_per_sample": 0.0409
+    }
+}

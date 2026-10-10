@@ -41,12 +41,28 @@ def main() -> None:
     # Apply feature engineering (same as the Pipeline's FunctionTransformer)
     X_engineered = engineer_features(X)
 
+    # Compute predictions from champion pipeline if available
+    predictions = None
+    champion_path = Path("models/champion_pipeline.joblib")
+    if champion_path.exists():
+        try:
+            import joblib
+
+            pipeline = joblib.load(champion_path)
+            predictions = pipeline.predict_proba(X)[:, 1]
+            logger.info(
+                "Computed reference predictions with champion pipeline (%d samples)",
+                len(predictions),
+            )
+        except Exception as e:
+            logger.warning("Could not compute reference predictions: %s", e)
+
     # Save reference
     output_dir = build_reference(
         X=X_engineered,
         y=y,
-        predictions=None,  # Predictions will be added after model training
-        model_version="manual",
+        predictions=predictions,
+        model_version="champion",
     )
 
     logger.info("Reference dataset saved to: %s", output_dir.resolve())

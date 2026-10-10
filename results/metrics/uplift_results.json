@@ -1,0 +1,15 @@
+{
+    "eligible_customers": 3473,
+    "segments": {
+        "Sure Thing (Ignore)": 1777,
+        "Persuadable (Target)": 978,
+        "Lost Cause (Ignore)": 508,
+        "Sleeping Dog (Do Not Disturb)": 210
+    },
+    "avg_cate_by_segment": {
+        "Sure Thing (Ignore)": 0.0,
+        "Persuadable (Target)": -1.0,
+        "Lost Cause (Ignore)": 0.0,
+        "Sleeping Dog (Do Not Disturb)": 1.0
+    }
+}

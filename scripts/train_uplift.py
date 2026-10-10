@@ -6,16 +6,20 @@ to predict the treatment effect of adding 'TechSupport' on churn probability.
 """
 
 import json
+import sys
 from pathlib import Path
 
-import pandas as pd
+# Add project root to sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.data.ingest import load_for_training
-from src.data.preprocess import preprocess
-from src.data.validate import validate_raw_data
-from src.features.feature_store import engineer_features
-from src.models.uplift import ChurnUpliftModel
-from src.utils.logging import get_logger
+import pandas as pd  # noqa: E402
+
+from src.data.ingest import load_for_training  # noqa: E402
+from src.data.preprocess import preprocess  # noqa: E402
+from src.data.validate import validate_raw_data  # noqa: E402
+from src.features.feature_store import engineer_features  # noqa: E402
+from src.models.uplift import ChurnUpliftModel  # noqa: E402
+from src.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -92,19 +96,38 @@ def run_uplift_experiment():
 
     logger.info("Segmentation Results:\n%s", json.dumps(segment_counts, indent=2))
 
-    # 7. Save Report
-    reports_dir = Path("reports")
-    reports_dir.mkdir(exist_ok=True)
+    # 7. Save Metrics
+    metrics_dir = Path("results/metrics")
+    metrics_dir.mkdir(parents=True, exist_ok=True)
     report_data = {
         "eligible_customers": len(X_target),
         "segments": segment_counts,
         "avg_cate_by_segment": avg_cate,
     }
 
-    with open(reports_dir / "uplift_report.json", "w") as f:
+    with open(metrics_dir / "uplift_results.json", "w") as f:
         json.dump(report_data, f, indent=4)
 
-    logger.info("Saved uplift report to reports/uplift_report.json")
+    logger.info("Saved uplift results to results/metrics/uplift_results.json")
+
+    # 8. Save Model Artifacts
+    import joblib
+
+    models_dir = Path("models/uplift")
+    models_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump(uplift_model, models_dir / "uplift_model.joblib")
+    with open(models_dir / "uplift_meta.json", "w") as f:
+        json.dump(
+            {
+                "feature_cols": list(X.columns),
+                "treatment_feature": "TechSupport",
+                "model_type": "TLearner (LGBMClassifier)",
+                "eligible_customers": len(X_target),
+            },
+            f,
+            indent=4,
+        )
+    logger.info("Saved uplift model artifact to models/uplift/uplift_model.joblib")
 
 
 if __name__ == "__main__":

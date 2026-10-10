@@ -4,10 +4,10 @@ from feast import Entity, FeatureView, Field, FileSource, ValueType
 from feast.types import Float32, Int64, String
 
 # 1. Define Data Source
-# This tells Feast where our offline feature data lives. We are using the parquet
-# file we generated from the raw data.
+# This tells Feast where our offline feature data lives. We point to the
+# feature store offline data stored in data/features/.
 customer_data = FileSource(
-    path="../../../data/raw/customer_features.parquet",
+    path="../../../data/features/customer_features.parquet",
     timestamp_field="event_timestamp",
 )
 

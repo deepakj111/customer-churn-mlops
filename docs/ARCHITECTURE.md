@@ -1,373 +1,223 @@
-# Architecture Guide
+# System Architecture Guide
 
-Deep dive into the architecture, design decisions, and data flow of the Customer Churn MLOps pipeline.
-
----
-
-## Table of Contents
-
-- [High-Level Architecture](#high-level-architecture)
-- [Module Dependency Graph](#module-dependency-graph)
-- [Data Flow](#data-flow)
-- [Key Design Decisions](#key-design-decisions)
-- [Configuration Architecture](#configuration-architecture)
-- [Model Serving Architecture](#model-serving-architecture)
-- [Monitoring Architecture](#monitoring-architecture)
+Comprehensive architectural documentation for the **Customer Churn MLOps & Causal AI Platform**.
 
 ---
 
-## High-Level Architecture
+## 1. Architectural Philosophy & Principles
 
-The system follows a **layered architecture** where each layer has a single responsibility and dependencies only flow downward:
+The system is designed according to core MLOps engineering principles:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Presentation                             │
-│ Streamlit (port 8501) │ FastAPI Docs (port 8000) │ Grafana (3000)│
-├──────────────────────────────────────────────────────────────────┤
-│                         Serving Layer                            │
-│   api.py  │  schemas.py (Pydantic v2)  │  model_loader.py       │
-├──────────────────────────────────────────────────────────────────┤
-│                         Model Layer                              │
-│   train.py  │  pipeline.py  │  evaluate.py  │  threshold.py     │
-├──────────────────────────────────────────────────────────────────┤
-│                         Feature Layer                            │
-│   feature_store.py (28 features)  │  feature_selector.py        │
-├──────────────────────────────────────────────────────────────────┤
-│                         Data Layer                               │
-│   ingest.py  │  validate.py (Pandera)  │  preprocess.py         │
-├──────────────────────────────────────────────────────────────────┤
-│                         Infrastructure                           │
-│   config_loader.py  │  logging.py  │  drift_detector.py         │
-├──────────────────────────────────────────────────────────────────┤
-│                         External Services                        │
-│  MLflow │ DVC │ Docker │ GitHub Actions │ Prometheus (port 9090) │
-└──────────────────────────────────────────────────────────────────┘
-```
+1. **Decoupled Production Workflows**: Research notebooks are strictly exploratory artifacts; all production pipelines (ingestion, validation, training, calibration, drift monitoring, retraining) run through orchestrated Prefect flows outside notebooks.
+2. **Strict Training-Serving Parity**: The Scikit-Learn `Pipeline` encapsulates feature engineering (28 domain functions), preprocessing, and calibrated inference into a single serialized object, making training-serving skew structurally impossible.
+3. **Stateless Feature Engineering**: All feature transformations are pure, stateless functions that execute identically on a single production inference row or a million-row batch.
+4. **Economic Optimization over Symmetric Metrics**: The decision threshold ($p^* = 0.34$) is derived from an asymmetric business cost matrix ($C_{FN} = \$500$ vs $C_{FP} = \$50$), directly maximizing net revenue saved.
+5. **Prescriptive Actionability via Causal AI**: Moving beyond predictive risk scoring ($P(Y=1 \mid X)$) to isolate the Conditional Average Treatment Effect (CATE) via an EconML T-Learner, preventing wasted spend on *Sure Things* and suppression of *Sleeping Dogs*.
+6. **Statistical Rigor in Retraining Gates**: Model promotion is protected by the **Nadeau-Bengio (2003) corrected repeated k-fold t-test**, eliminating anti-conservative false positives caused by shared CV fold data.
+7. **Distribution-Free Uncertainty Bounds**: Incorporating **MAPIE Split-Conformal Prediction** to output 90% confidence prediction sets alongside point probabilities.
 
 ---
 
-## Module Dependency Graph
+## 2. High-Level System Architecture
 
 ```
-src/utils/config_loader.py    ←── Everything depends on this
-src/utils/logging.py           ←── Everything depends on this
-        │
-        ▼
-src/data/ingest.py            ← Loads raw CSV, minimal cleanup
-src/data/validate.py          ← Pandera schema enforcement
-src/data/preprocess.py        ← Target encoding, column cleanup
-        │
-        ▼
-src/features/feature_store.py  ← 28 stateless features, routing lists
-src/features/feature_selector.py ← 5-stage selection (optional)
-        │
-        ▼
-src/models/pipeline.py        ← sklearn.Pipeline factory
-src/models/train.py           ← Training orchestration
-src/models/evaluate.py        ← ML + business metrics
-src/models/threshold.py       ← Cost-optimal threshold tuning
-        │
-        ├──➔ Advanced Modules (Optional / Analytical):
-        │      ├── conformal.py             ← 90% confidence sets
-        │      ├── fairness_audit.py        ← Demographic Parity / Equalized Odds
-        │      ├── calibration_diagnostics.py ← ECE / Brier Score
-        │      └── hpo.py                   ← Optuna Bayesian Optimization
-        │
-        ▼
-src/serving/schemas.py        ← Pydantic v2 request/response models
-src/serving/model_loader.py   ← Thread-safe lazy loading
-src/serving/api.py            ← FastAPI endpoints
-        │
-        ▼
-src/monitoring/drift_detector.py  ← PSI, chi-squared, prediction drift
-src/monitoring/reference_builder.py ← Parquet snapshots
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                             PRESENTATION & CONSUMERS                              │
+│  FastAPI Swagger (port 8000) │ Streamlit (port 8501) │ Grafana Telemetry (3000)   │
+└─────────────────────────────────────────┬─────────────────────────────────────────┘
+                                          │
+┌─────────────────────────────────────────▼─────────────────────────────────────────┐
+│                                 SERVING LAYER                                     │
+│  api.py (REST) │ schemas.py (Pydantic v2) │ model_loader.py (Thread-safe Cache)   │
+│  ├── /predict & /predict/batch (LightGBM + SHAP + MAPIE Conformal Sets)           │
+│  ├── /predict/customer/{id} (Feast Online Store SQLite/Redis Hydration)           │
+│  └── /uplift/predict & /uplift/batch (EconML T-Learner CATE Quadrant Engine)       │
+└─────────────────────────────────────────┬─────────────────────────────────────────┘
+                                          │
+┌─────────────────────────────────────────▼─────────────────────────────────────────┐
+│                     ORCHESTRATED PRODUCTION PIPELINES (pipelines/)                │
+│  training_pipeline.py                   │  retraining_pipeline.py                 │
+│  ├── Ingest & Pandera Schema Validation │  ├── Decile PSI & Chi-sq Drift Check    │
+│  ├── Feast Feature Store Materialize    │  ├── Challenger Training & Calibration  │
+│  ├── 47-Feature Pipeline Fit            │  ├── Nadeau-Bengio Corrected t-Test Gate│
+│  ├── Isotonic FrozenEstimator Calibrate │  └── MLflow Registry Champion Promotion │
+│  ├── EEOC 4/5ths Rule Fairness Audit    │                                         │
+│  └── MAPIE Conformal Artifact Persist   │                                         │
+└─────────────────────────────────────────┬─────────────────────────────────────────┘
+                                          │
+┌─────────────────────────────────────────▼─────────────────────────────────────────┐
+│                       CORE DATA SCIENCE MODULES (src/)                            │
+│  src/data/      : ingest.py, validate.py (Pandera), preprocess.py                 │
+│  src/features/  : feature_store.py (28 features), feature_selector.py, feast_repo  │
+│  src/models/    : train.py, pipeline.py, threshold.py, conformal.py, uplift.py,   │
+│                   fairness_audit.py, statistical_comparison.py                    │
+│  src/monitoring/: drift_detector.py, reference_builder.py                         │
+│  src/utils/     : config_loader.py (Singleton YAML Dataclasses), logging.py       │
+└─────────────────────────────────────────┬─────────────────────────────────────────┘
+                                          │
+┌─────────────────────────────────────────▼─────────────────────────────────────────┐
+│                       INFRASTRUCTURE & EXTERNAL SERVICES                          │
+│  MLflow (5000) │ Prometheus (9090) │ DVC Storage │ Docker Compose │ GitHub CI/CD  │
+└───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Data Flow
-
-### Training Pipeline
+## 3. Module Dependency Graph
 
 ```
-Raw CSV (data/raw/)
-    │
-    ▼ ingest.load_for_training()
-Loaded DataFrame (7043 rows, 21 cols)
-    │
-    ▼ validate.validate_raw_data()
-    │   ├── Fix TotalCharges blank strings → MonthlyCharges
-    │   └── Pandera schema: types, ranges, allowed values
-Validated DataFrame
-    │
-    ▼ preprocess.run_preprocessing()
-    │   ├── Encode target: "Yes"/"No" → 1/0
-    │   ├── Cast SeniorCitizen: int → str ("0"/"1")
-    │   └── Drop customerID column
-(X: features DataFrame, y: target Series)
-    │
-    ▼ train_test_split (3-way: 70/10/20)
-(X_train, X_val, X_test, y_train, y_val, y_test)
-    │
-    ▼ pipeline.build_pipeline()
-    │   ├── Step 1: FunctionTransformer(engineer_features)  → 28 new columns
-    │   ├── Step 2: ColumnTransformer
-    │   │     ├── OneHotEncoder for categorical features
-    │   │     ├── StandardScaler for numerical features
-    │   │     └── passthrough for binary/ordinal features
-    │   └── Step 3: LGBMClassifier(hyperparams from config)
-sklearn.Pipeline (single serializable object)
-    │
-    ▼ pipeline.fit(X_train, y_train)
-    │
-    ▼ threshold.find_cost_optimal_threshold(y_val, y_val_proba)
-    │   └── Minimizes: FN_cost × FN_count + FP_cost × FP_count
-Optimal threshold (e.g., 0.34)
-    │
-    ▼ evaluate.evaluate(y_test, y_test_proba, threshold)
-    │   ├── ML metrics: ROC-AUC, PR-AUC, F1, Precision, Recall
-    │   └── Business metrics: total_cost, cost_saved, ROI
-Final metrics dict → MLflow logging
-```
-
-### Inference Pipeline
-
-```
-JSON request body (19 fields)
-    │
-    ▼ Pydantic v2 validation (schemas.CustomerFeatures)
-    │   └── Type checks, value constraints, enum validation
-Validated CustomerFeatures object
-    │
-    ▼ Convert to 1-row DataFrame
-    │
-    ▼ model_loader.get_model() (lazy, thread-safe)
-    │   ├── Try 1: MLflow Model Registry
-    │   ├── Try 2: Local training (in-memory, ~15s)
-    │   └── Cache: subsequent calls return instantly
-(pipeline, threshold)
-    │
-    ▼ pipeline.predict_proba(df)[:, 1]
-churn_probability (float)
-    │
-    ▼ Apply threshold + risk tier classification
-    │   ├── probability ≥ 0.60  → HIGH_RISK
-    │   ├── 0.35 ≤ prob < 0.60  → MEDIUM_RISK
-    │   └── probability < 0.35  → LOW_RISK
-    │
-    ▼ PredictionResponse JSON
-{churn_probability, will_churn, risk_tier, threshold_used, request_id}
-```
-
----
-
-## Key Design Decisions
-
-### 1. Single sklearn.Pipeline Object
-
-**Decision:** Encapsulate feature engineering, preprocessing, and model inference into a single `sklearn.Pipeline`.
-
-**Why:** This is the most critical design decision. It makes training-serving skew *structurally impossible*. The exact same transformations that ran during training run during inference — there's no separate "feature engineering service" or manual preprocessing step that could diverge.
-
-```python
-# The Pipeline contains 3 steps:
-# Step 1: FunctionTransformer(engineer_features)  → adds 28 columns
-# Step 2: ColumnTransformer                       → OHE + Scale + passthrough
-# Step 3: LGBMClassifier                          → prediction
-pipeline = Pipeline([
-    ("feature_engineering", FunctionTransformer(engineer_features)),
-    ("preprocessor", column_transformer),
-    ("classifier", LGBMClassifier(**hyperparams)),
-])
-```
-
-### 2. Stateless Feature Engineering
-
-**Decision:** All 28 engineered features are computed via pure, stateless functions.
-
-**Why:** Stateful features (e.g., running averages, lookups against training data) create subtle bugs when applied to single production rows. Stateless features guarantee identical behavior regardless of batch size or execution context.
-
-```python
-# ✅ Stateless — works on any single row
-df["charge_to_tenure_ratio"] = df["MonthlyCharges"] / (df["tenure"] + 1)
-
-# ❌ Stateful — requires training set context
-df["charge_percentile"] = df["MonthlyCharges"].rank(pct=True)  # WRONG in production
-```
-
-### 3. Cost-Matrix Threshold Optimization
-
-**Decision:** Use a business cost matrix ($500/FN, $20/FP) instead of the default 0.5 threshold.
-
-**Why:** In churn prediction, missing a churner (false negative) is 25x more expensive than a false alarm (false positive). The default 0.5 threshold optimizes for accuracy, which is misleading with imbalanced data (73% non-churners). Our cost-optimal threshold (~0.34) catches more churners at the cost of more false alarms — a profitable trade-off.
-
-### 4. Lazy Model Loading
-
-**Decision:** Load the model on the first `/predict` request, not at API startup.
-
-**Why:**
-- Faster API startup time (important for container orchestrators that need quick health check responses)
-- Graceful handling of MLflow unavailability (falls back to local training)
-- Thread-safe via `threading.Lock` — concurrent first-requests don't trigger duplicate loading
-
-### 5. 3-Way Data Split
-
-**Decision:** Train (70%) / Validation (10%) / Test (20%) instead of the common Train/Test split.
-
-**Why:** The validation set is used exclusively for threshold optimization. If we optimized the threshold on the test set, we'd be leaking test information into the model's decision boundary — the reported test metrics would be overly optimistic.
-
-### 6. Config-Driven Architecture
-
-**Decision:** All tunable parameters live in YAML files, loaded into typed Python dataclasses.
-
-**Why:**
-- Business users can adjust cost matrix without touching code
-- New deployments can use different thresholds without rebuilding containers
-- Type safety catches misconfiguration at load time, not at runtime
-
-### 7. Advanced ML Robustness Checks
-
-**Decision:** Post-training, the model is subjected to Fairness Auditing, Calibration Diagnostics, and Conformal Prediction.
-**Why:** Modern AI engineering requires strict validation beyond simple accuracy:
-- **Fairness (`fairness_audit.py`):** Ensures we do not systematically withhold retention offers from protected groups (e.g., SeniorCitizens) by measuring Equalized Odds and Demographic Parity.
-- **Calibration (`calibration_diagnostics.py`):** A probability output of 0.8 must actually correspond to an 80% empirical chance of churn. We measure Expected Calibration Error (ECE) and Brier Score, automatically applying Isotonic Regression if the raw LGBM distribution is skewed.
-- **Conformal Prediction (`conformal.py`):** Provides a statistically guaranteed margin of error (e.g. 90% confidence sets).
-
-### 8. Feature Store Ready (Feast)
-
-**Decision:** Maintain an offline/online feature registry using `Feast`.
-**Why:** While local training computes features in-memory, scaling to enterprise production requires decoupling feature computation from inference. The system includes a fully configured `feast_repo` that can materialize features to an online store (e.g. Redis), enabling low-latency API reads where the client only passes a `customer_id` instead of the full payload.
-
----
-
-## Configuration Architecture
-
-```
-configs/
-├── feature_config.yaml      # What features exist
-├── model_config.yaml         # How the model is built
-├── training_config.yaml      # How training is orchestrated
-└── monitoring_config.yaml    # When to trigger drift alerts
+src/utils/config_loader.py   (Loads YAML configs into typed dataclasses)
+src/utils/logging.py          (Structured JSON/text logging across processes)
          │
          ▼
-src/utils/config_loader.py
-         │
-    get_config() → singleton
+src/data/ingest.py           (Raw CSV loader & train/test partitioning)
+src/data/validate.py         (Pandera schema validation contracts)
+src/data/preprocess.py       (Target encoding & SeniorCitizen casting)
          │
          ▼
-    @dataclass FeatureConfig
-    @dataclass ModelConfig
-    @dataclass TrainingConfig
-    @dataclass MonitoringConfig
-    @dataclass ProjectConfig (wraps all above)
-```
-
-The `get_config()` function implements the singleton pattern — config is loaded once and cached. Tests reset the singleton via `reset_config()` in `conftest.py`.
-
----
-
-## Model Serving Architecture
-
-```
-FastAPI Application (api.py)
-    │
-    ├── Middleware: CORS + Request ID injection
-    │
-    ├── POST /predict
-    │   ├── Pydantic validation (automatic, before handler)
-    │   ├── model_loader.get_model() → (pipeline, threshold)
-    │   ├── pipeline.predict_proba(df)
-    │   └── Apply threshold → response
-    │
-    ├── POST /predict/batch
-    │   ├── Loop: validate + predict per customer
-    │   └── Aggregate risk tier counts
-    │
-    ├── GET /health
-    │   └── Returns status + model_loaded flag
-    │
-    ├── GET /model/info
-    │   └── Returns model metadata from model_loader
-    │
-    └── GET /metrics
-        └── Exposes Prometheus counters and histograms
-
-Model Loader (model_loader.py)
-    │
-    ├── Lazy loading (first request triggers load)
-    ├── Thread-safe (threading.Lock)
-    │
-    ├── Strategy 1: MLflow Model Registry
-    │   └── Fetch by registered_model_name + stage
-    │
-    └── Strategy 2: Local Training Fallback
-        ├── Load raw data → validate → preprocess
-        ├── 3-way split (70/10/20)
-        ├── Build pipeline → fit → threshold optimize
-        └── Cache in module globals (memory only)
+src/features/feature_store.py (28 domain features; Feast feature views)
+src/features/feature_selector.py (5-stage consensus feature pruning)
+         │
+         ▼
+src/models/pipeline.py       (sklearn.Pipeline assembler: FeatEng → Prep → Clf)
+src/models/threshold.py      (Cost-optimal threshold optimization)
+src/models/conformal.py      (MAPIE split-conformal wrapper)
+src/models/uplift.py         (EconML T-Learner CATE model)
+src/models/fairness_audit.py (EEOC 4/5ths Disparate Impact audit)
+src/models/statistical_comparison.py (Nadeau-Bengio corrected CV t-test)
+         │
+         ▼
+pipelines/training_pipeline.py   (Automated production training Prefect flow)
+pipelines/retraining_pipeline.py (Automated drift-triggered retraining flow)
+         │
+         ▼
+src/serving/schemas.py       (Pydantic v2 input/output data validation)
+src/serving/model_loader.py  (Lazy thread-safe caching with instant disk fallback)
+src/serving/api.py           (FastAPI serving routes & Prometheus counters)
 ```
 
 ---
 
-## Monitoring Architecture
+## 4. End-to-End Pipeline Data Flows
 
-The system implements a dual-mode monitoring architecture combining real-time API observability with periodic batch data drift detection.
+### A. Production Training Flow (`pipelines/training_pipeline.py`)
 
-### 1. Real-Time Observability (Prometheus & Grafana)
-
-```
-                            Production Requests
-                                     │
-    ┌────────────────────────────────▼─────────────────────────────────┐
-    │                       FastAPI /predict                           │
-    │  Records Counter (reqs, errors) & Histogram (latency, probs)     │
-    └────────────────────────────────┬─────────────────────────────────┘
-                                     │ Exposes /metrics
-    ┌────────────────────────────────▼─────────────────────────────────┐
-    │                       Prometheus (9090)                          │
-    │      Iteratively scrapes and stores time-series metrics          │
-    └────────────────────────────────┬─────────────────────────────────┘
-                                     │ Queried via PromQL
-    ┌────────────────────────────────▼─────────────────────────────────┐
-    │                        Grafana (3000)                            │
-    │         Visualizes request load, churn drift, and errors         │
-    └──────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    A[Raw Dataset: Telco CSV] -->|ingest.py| B[Pandera Schema Validation]
+    B -->|Check types, bounds, TotalCharges| C[preprocess.py: Encode Churn 0/1]
+    C -->|80/20 Stratified Partition| D[Train & Validation Splits]
+    D -->|Feast apply & materialize| E[Feast Feature Store Sync]
+    D -->|FunctionTransformer| F[Generate 28 Domain Features]
+    F -->|Consensus Pruning| G[Fit LightGBM Classifier]
+    G -->|FrozenEstimator| H[Isotonic Probability Calibration on Val]
+    H -->|Find Cost Minimum| I[Optimize Threshold: p* = 0.34]
+    I -->|EEOC 4/5ths Rule| J[Algorithmic Fairness Audit]
+    J -->|MAPIE Split-Conformal| K[Fit 90% Conformal Predictor]
+    K -->|Persist models/champion_pipeline.joblib| L[MLflow Model Registry]
 ```
 
-### 2. Batch Data Drift Detection (PSI & Chi-Squared)
+### B. Production Retraining Flow (`pipelines/retraining_pipeline.py`)
+
+```mermaid
+graph TD
+    M[Incoming Production Stream] --> N[DriftDetector: PSI, Chi-sq, Wasserstein]
+    N --> O{Retraining Trigger Evaluation}
+    O -->|PSI < 0.20 & Wasserstein < 0.10| P[Log Healthy Status & Sleep]
+    O -->|Drift Exceeded or Force Flag| Q[Train Challenger Model & Calibrate]
+    Q --> R[Run 5-Fold Stratified Cross-Validation on Both]
+    R --> S[Nadeau-Bengio Corrected t-Test]
+    S --> T{Challenger Win p < 0.05?}
+    T -->|Yes| U[Promote Challenger in MLflow Model Registry]
+    T -->|No| V[Retain Production Champion & Alert Engineering Team]
+```
+
+### C. Real-Time Serving Flow (`src/serving/api.py`)
+
+```mermaid
+graph LR
+    Req[Incoming HTTP Request] --> Val[Pydantic v2 Validation]
+    Val --> Route{Endpoint?}
+    Route -->|/predict| Pipe[Load Calibrated Pipeline]
+    Route -->|/predict/customer| Feast[Hydrate Features from Feast]
+    Feast --> Pipe
+    Pipe --> Score[Predict Calibrated Probability]
+    Score --> SHAP[Compute TreeExplainer SHAP Drivers]
+    Score --> Conf[Evaluate MAPIE Conformal Set]
+    SHAP --> Resp[Assemble PredictionResponse JSON]
+    Conf --> Resp
+    Route -->|/uplift/predict| Uplift[Load EconML T-Learner]
+    Uplift --> CATE[Compute CATE Treatment Effect]
+    CATE --> Quad[Assign Quadrant: Persuadable/Sleeping Dog]
+    Quad --> UResp[Assemble UpliftPredictionResponse JSON]
+```
+
+---
+
+## 5. In-Depth Engineering Decisions
+
+### 1. Training-Serving Parity via `sklearn.Pipeline`
+**Decision:** All 28 domain features, ColumnTransformer scalers, OneHotEncoders, and classifier steps are encapsulated into a single unified `sklearn.Pipeline`.
+**Why:** Prevents a common failure mode in deployed ML systems: training-serving skew. At inference time, the exact identical code path and fitted parameters run on incoming production rows.
+
+### 2. Isotonic Calibration with Modern `FrozenEstimator`
+**Decision:** Calibrate predicted probabilities using Isotonic Regression wrapped in Scikit-Learn 1.6+ `FrozenEstimator(pipeline)`.
+**Why:** Uncalibrated LightGBM models often push probabilities toward 0 or 1. Because financial cost-matrices allocate capital according to expected value ($\mathbb{E}[\text{loss}] = p \cdot C_{FN}$), probabilities must match empirical frequencies. Using `FrozenEstimator` prevents estimator refitting and eliminates deprecation warnings.
+
+### 3. Causal Uplift (Prescriptive Retention) vs. Predictive Churn
+**Decision:** Integrate an EconML T-Learner modeling the Conditional Average Treatment Effect (CATE):
+$$\tau(X) = \mathbb{E}[Y \mid X, T=1] - \mathbb{E}[Y \mid X, T=0]$$
+**Why:** Pure churn models only answer *"Who is likely to leave?"*, causing businesses to waste money on customers who were never going to leave anyway (*Sure Things*) or customers who cannot be convinced (*Lost Causes*). Worse, contacting *Sleeping Dogs* irritates them into canceling. Causal AI isolates the **28.2% Persuadables** where retention intervention actually prevents churn.
+
+### 4. Hypothesis-Tested Retraining Gates (Nadeau-Bengio)
+**Decision:** Gate automated challenger promotions using the Nadeau & Bengio (2003) corrected repeated k-fold t-test rather than naive difference in means.
+**Why:** Cross-validation folds share 80% of training data across iterations, violating the independent samples assumption of standard Student's t-tests and generating wildly inflated false positive rates. The Nadeau-Bengio correction adjusts fold sample variance by $(\frac{1}{K} + \frac{n_{\text{test}}}{n_{\text{train}}})$, preventing costly regressions in production.
+
+### 5. Distribution-Free Conformal Prediction (MAPIE)
+**Decision:** Supplement churn probabilities with MAPIE Split-Conformal Prediction sets at 90% confidence.
+**Why:** Guarantees marginal coverage over arbitrary data distributions without assuming Gaussianity:
+- Singleton sets `{"Stay"}` or `{"Churn"}`: high epistemic confidence.
+- Dual set `{"Stay", "Churn"}`: ambiguous boundary; routes customer to human concierge team.
+
+### 6. Sub-Millisecond Cold Starts via Disk Fallback
+**Decision:** Implement a 3-tier model loading fallback in [`model_loader.py`](file:///home/deepak/customer-churn-mlops/src/serving/model_loader.py):
+1. MLflow Model Registry (remote).
+2. Local disk artifact (`models/champion_pipeline.joblib`) — loads in $< 1$ millisecond.
+3. In-memory local training fallback (~12 seconds).
+**Why:** Guarantees zero downtime during container cold-starts, network partitions, or offline CI/CD test runs.
+
+---
+
+## 6. Configuration Management
+
+All operational parameters are separated from code into YAML configurations:
+- [`configs/feature_config.yaml`](file:///home/deepak/customer-churn-mlops/configs/feature_config.yaml): Raw feature types, categorical values, engineered feature names.
+- [`configs/model_config.yaml`](file:///home/deepak/customer-churn-mlops/configs/model_config.yaml): LightGBM hyperparameters, cost matrix parameters ($C_{FN}=\$500, C_{FP}=\$50$), performance thresholds.
+- [`configs/training_config.yaml`](file:///home/deepak/customer-churn-mlops/configs/training_config.yaml): Split ratios (70/10/20), cross-validation folds ($K=5$), random seed (42).
+- [`configs/monitoring_config.yaml`](file:///home/deepak/customer-churn-mlops/configs/monitoring_config.yaml): Drift alert thresholds (PSI = 0.25, Chi-sq $\alpha = 0.05$, prediction drift = 0.15).
+
+Configurations are parsed into immutable, type-checked Python `@dataclass` singletons via [`src/utils/config_loader.py`](file:///home/deepak/customer-churn-mlops/src/utils/config_loader.py).
+
+---
+
+## 7. Storage Taxonomy & Artifact Organization
+
+Repository storage is cleanly organized into two dedicated domains:
 
 ```
-Training Data (saved as reference)
-    │
-    ▼ reference_builder.build_reference()
-    │   ├── reference_features.parquet    (feature distributions)
-    │   ├── reference_probabilities.npy   (model predictions)
-    │   └── reference_metadata.json       (timestamps, model version)
-    │
-    │                    Production Requests (over time)
-    │                              │
-    └──────────┐                   │
-               ▼                   ▼
-        DriftDetector(reference_df)
-               │
-    ┌──────────┼──────────────────────┐
-    │          │                      │
-    ▼          ▼                      ▼
-  PSI       Chi-squared         Prediction Drift
-(numerical) (categorical)     (mean probability shift)
-    │          │                      │
-    └──────────┴──────────────────────┘
-               │
-               ▼
-         DriftReport
-    ├── per-feature drift scores
-    ├── overall_drift_detected (bool)
-    ├── drifted_features (list)
-    └── summary message
-
-    Thresholds (from monitoring_config.yaml):
-    ├── PSI > 0.25         → significant numerical drift
-    ├── chi-squared p < 0.05 → significant categorical drift
-    └── prediction drift > 15% → model output has shifted
+┌─────────────────────────────────────────┐   ┌─────────────────────────────────────────┐
+│              DATA (data/)               │   │             RESULTS (results/)          │
+├─────────────────────────────────────────┤   ├─────────────────────────────────────────┤
+│ • raw/       : DVC source CSVs          │   │ • Executive Markdown Reports            │
+│ • processed/ : Canonical Parquet splits │   │   (MODEL_CARD, BUSINESS_CASE,           │
+│ • features/  : Feast offline Parquet    │   │    BENCHMARK, DRIFT, DATA_GOVERNANCE)   │
+│ • reference/ : Drift baselines          │   │ • metrics/ : Machine-readable JSONs     │
+│                (Parquet/Metadata)       │   │ • tuning/  : Hyperparameter sweeps      │
+│                                         │   │ • figures/ : Categorized visual charts  │
+│                                         │   │   (eda/, features/, benchmarks/, eval/) │
+└─────────────────────────────────────────┘   └─────────────────────────────────────────┘
 ```
+
+See dedicated architectural guides:
+- [**`data/README.md`**](file:///home/deepak/customer-churn-mlops/data/README.md): Detailed 4-tier storage taxonomy and data lineage.
+- [**`results/README.md`**](file:///home/deepak/customer-churn-mlops/results/README.md): Unified results catalog, evaluation metrics, and figure sitemap.

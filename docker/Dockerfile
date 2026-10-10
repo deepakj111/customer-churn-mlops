@@ -8,7 +8,7 @@
 #
 # Stage 2 (runtime):
 #   - Slim Python image (~150MB vs ~900MB for full).
-#   - Non-root user for security best practices.
+#   - Non-root user for container security.
 #   - Built-in health check for container orchestrators.
 #   - Only production dependencies — no dev tools, no test suites.
 #

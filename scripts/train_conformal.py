@@ -12,7 +12,7 @@ Using training data would invalidate the coverage guarantee.
 Output:
     - models/conformal/conformal_model.joblib
     - models/conformal/conformal_meta.json
-    - reports/conformal_report.json (coverage & efficiency metrics)
+    - results/metrics/conformal_results.json (coverage & efficiency metrics)
 """
 
 import json
@@ -143,9 +143,9 @@ def run_conformal_experiment() -> None:
     # 6. Save artifacts
     conformal.save()
 
-    reports_dir = Path("reports")
-    reports_dir.mkdir(exist_ok=True)
-    with open(reports_dir / "conformal_report.json", "w") as f:
+    metrics_dir = Path("results/metrics")
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    with open(metrics_dir / "conformal_results.json", "w") as f:
         json.dump(report, f, indent=4)
 
     logger.info(

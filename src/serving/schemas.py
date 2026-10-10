@@ -105,6 +105,16 @@ class RiskTier(str, Enum):
     LOW = "LOW_RISK"
 
 
+class UpliftSegment(str, Enum):
+    """Prescriptive customer segments derived from Causal Uplift Modeling."""
+
+    PERSUADABLE = "Persuadable (Target)"
+    SURE_THING = "Sure Thing (Ignore)"
+    LOST_CAUSE = "Lost Cause (Ignore)"
+    SLEEPING_DOG = "Sleeping Dog (Do Not Disturb)"
+    UNKNOWN = "Unknown"
+
+
 # ---------------------------------------------------------------------------
 # Request schemas
 # ---------------------------------------------------------------------------
@@ -409,6 +419,76 @@ class BatchPredictionResponse(BaseModel):
     request_id: str | None = Field(
         default=None,
         description="Unique request identifier for the batch.",
+    )
+
+
+class UpliftPredictionResponse(BaseModel):
+    """Prescriptive uplift response for targeted customer retention intervention."""
+
+    cate: float = Field(
+        ...,
+        description=(
+            "Conditional Average Treatment Effect (CATE). "
+            "Negative indicates treatment reduces churn."
+        ),
+        examples=[-0.12],
+    )
+    uplift_segment: UpliftSegment = Field(
+        ...,
+        description="Prescriptive quadrant assignment.",
+        examples=[UpliftSegment.PERSUADABLE],
+    )
+    recommended_action: str = Field(
+        ...,
+        description="Actionable business intervention strategy.",
+        examples=["Intervene: Target customer. Offer proactive retention bundle."],
+    )
+    base_churn_probability: float = Field(
+        ...,
+        description="Baseline churn probability without intervention.",
+        examples=[0.68],
+    )
+    request_id: str | None = Field(
+        default=None,
+        description="Unique request identifier.",
+    )
+
+
+class BatchUpliftResponse(BaseModel):
+    """Batch uplift prediction response with prescriptive campaign summary."""
+
+    predictions: list[UpliftPredictionResponse] = Field(
+        ...,
+        description="List of per-customer uplift predictions.",
+    )
+    total_customers: int = Field(
+        ...,
+        description="Total customers evaluated.",
+        examples=[50],
+    )
+    persuadables_count: int = Field(
+        ...,
+        description="Customers where intervention is predicted to prevent churn.",
+        examples=[15],
+    )
+    sure_things_count: int = Field(
+        ...,
+        description="Customers who will stay regardless (do not waste budget).",
+        examples=[25],
+    )
+    lost_causes_count: int = Field(
+        ...,
+        description="Customers who will churn regardless (do not waste budget).",
+        examples=[8],
+    )
+    sleeping_dogs_count: int = Field(
+        ...,
+        description="Customers who may churn IF contacted (do not disturb!).",
+        examples=[2],
+    )
+    request_id: str | None = Field(
+        default=None,
+        description="Unique batch request identifier.",
     )
 
 

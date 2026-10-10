@@ -1,0 +1,23 @@
+{
+    "test_set_size": 1409,
+    "confidence_90": {
+        "target_coverage": 0.9,
+        "empirical_coverage": 0.8928,
+        "coverage_gap": -0.0072,
+        "avg_set_size": 1.2917,
+        "empty_sets": 0,
+        "singleton_sets": 998,
+        "ambiguous_sets": 411,
+        "singleton_rate": 0.7083
+    },
+    "confidence_95": {
+        "target_coverage": 0.95,
+        "empirical_coverage": 0.9446,
+        "coverage_gap": -0.0054,
+        "avg_set_size": 1.4592,
+        "empty_sets": 0,
+        "singleton_sets": 762,
+        "ambiguous_sets": 647,
+        "singleton_rate": 0.5408
+    }
+}

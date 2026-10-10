@@ -205,15 +205,14 @@ def run_all_benchmarks():
         logger.info("\n%s", comparison_report.summary())
         sorted_results["statistical_comparison"] = comparison_report.to_dict()
 
-    # Save artifact
-    reports_dir = Path("reports")
-    reports_dir.mkdir(exist_ok=True)
-    out_path = reports_dir / "benchmark_report.json"
-
-    with open(out_path, "w") as f:
+    # Save artifacts: machine-readable metrics to results/metrics/
+    metrics_dir = Path("results/metrics")
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    out_metric_path = metrics_dir / "benchmark_results.json"
+    with open(out_metric_path, "w") as f:
         json.dump(sorted_results, f, indent=4)
 
-    logger.info("Benchmarking suite complete. Results written to %s", out_path)
+    logger.info("Benchmarking suite complete. Results written to %s", out_metric_path)
 
 
 if __name__ == "__main__":

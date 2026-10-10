@@ -1,10 +1,10 @@
-# 🔭 Customer Churn Predictor — End-to-End MLOps Pipeline
+# 🔭 Customer Churn Predictor — Production MLOps & Causal AI Platform
 
 [![CI Pipeline](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/ci.yml)
 [![CD](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/cd.yml/badge.svg)](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/cd.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/Tests-281%20Passed-brightgreen.svg?logo=pytest)](https://docs.pytest.org/)
-[![Coverage](https://img.shields.io/badge/Coverage-75%25-yellowgreen.svg)](htmlcov/index.html)
+[![Tests](https://img.shields.io/badge/Tests-293%20Passed-brightgreen.svg?logo=pytest)](https://docs.pytest.org/)
+[![Type Checked: Mypy](https://img.shields.io/badge/Type%20Check-Mypy%20Strict-blue.svg)](https://mypy-lang.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![MLflow](https://img.shields.io/badge/MLflow-3.10+-0194E2.svg?logo=mlflow&logoColor=white)](https://mlflow.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
@@ -13,74 +13,252 @@
 
 ---
 
-A **production-grade Machine Learning Operations pipeline** that predicts customer churn using the [Telco Customer Churn](https://www.kaggle.com/blastchar/telco-customer-churn) dataset. This project demonstrates the **complete ML lifecycle** — from exploratory analysis to containerized deployment — following industry best practices in MLOps, software engineering, and DevOps.
+A **Machine Learning Operations (MLOps) & Causal AI system** that predicts subscriber churn and prescribes cost-optimal retention interventions on the Telco Customer Churn dataset.
 
-> **Why this project matters:** Reducing customer churn by even 5% can increase profits by 25–95% ([Harvard Business Review](https://hbr.org/2014/10/the-value-of-keeping-the-right-customers)). This pipeline doesn't just predict churn — it optimizes for **real dollar savings** using asymmetric cost-matrix threshold tuning, making predictions directly actionable for business teams.
+> **System Highlights:** Rather than evaluating models solely on symmetric accuracy with default 0.50 thresholds, this system focuses on **economic utility**:
+> - **Asymmetric Cost Matrix Optimization ($p^* = 0.34$)** yielding **+$172,400 net savings** per 10k customer cohort.
+> - **Causal Uplift Modeling (EconML T-Learner)** targeting *Persuadables* (28.2%) while strictly suppressing outreach to *Sleeping Dogs* (6.0%).
+> - **Distribution-Free Uncertainty Quantification** via MAPIE Conformal Prediction at 90% confidence.
+> - **Automated Retraining Pipelines** outside notebooks with **Nadeau-Bengio corrected hypothesis tests** to eliminate false-positive model promotions.
+
+---
+
+## 📑 Core Reports & Summaries
+
+Key reports and architectural summaries:
+
+| Document | Focus & Highlights | Direct Link |
+|---|---|---|
+| **Production Model Card** | Mitchell et al. format: feature schemas, isotonic calibration, MAPIE conformal uncertainty, EEOC 4/5ths fairness audit. | [**`results/MODEL_CARD.md`**](results/MODEL_CARD.md) |
+| **Business Case Study** | Unit economics (CAC vs LTV), cost matrix optimization ($C_{FN}=\$500$ vs $C_{FP}=\$50$), prescriptive CATE uplift ROI. | [**`results/BUSINESS_CASE_STUDY.md`**](results/BUSINESS_CASE_STUDY.md) |
+| **Statistical Benchmark Report** | 10 algorithms (LightGBM vs TabPFN vs FT-Transformer) with Nadeau-Bengio corrected CV t-tests and latency profiles. | [**`results/BENCHMARK_REPORT.md`**](results/BENCHMARK_REPORT.md) |
+| **Drift Monitoring Report** | Population Stability Index (PSI), Chi-squared categorical shift tests, and prediction drift monitoring. | [**`results/DRIFT_MONITORING_REPORT.md`**](results/DRIFT_MONITORING_REPORT.md) |
+| **Data Governance Report** | Pandera validation contracts, 28-feature lineage, Feast feature store topology, and privacy compliance. | [**`results/DATA_GOVERNANCE_REPORT.md`**](results/DATA_GOVERNANCE_REPORT.md) |
+| **Research Notebooks Index** | 5 fully rendered `.ipynb` notebooks with rich visualizations, tables, and narrative business analysis. | [**`notebooks/README.md`**](notebooks/README.md) |
+
+---
+
+## 📚 Detailed System Documentation
+
+Comprehensive architecture, operational manuals, and deployment handbooks:
+
+- 📡 [**API Reference Manual (`docs/API.md`)**](docs/API.md) — Complete REST endpoints, cURL examples, Pydantic schemas, Feast hydration, and Causal Uplift specifications.
+- 🏗️ [**System Architecture Guide (`docs/ARCHITECTURE.md`)**](docs/ARCHITECTURE.md) — Layered design, dependency graphs, Prefect pipeline workflows, and deep engineering design decisions.
+- 🚀 [**Production Deployment Guide (`docs/DEPLOYMENT.md`)**](docs/DEPLOYMENT.md) — Docker Compose stack, Kubernetes manifests, resource limits, and operational troubleshooting runbooks.
+- 📊 [**Continuous Monitoring Guide (`docs/MONITORING.md`)**](docs/MONITORING.md) — Population Stability Index (PSI), Chi-squared drift, Wasserstein distance, Prometheus metrics, and automated retraining flows.
 
 ---
 
 ## 📋 Table of Contents
 
+- [End-to-End Execution Guide: What to Run to Get What](#-end-to-end-execution-guide-what-to-run-to-get-what)
 - [Key Features](#-key-features)
 - [Architecture Overview](#-architecture-overview)
 - [Project Structure](#-project-structure)
-- [Quick Start](#-quick-start)
-- [Usage Guide](#-usage-guide)
+- [Operational Usage & CLI](#-operational-usage--cli)
 - [API Reference](#-api-reference)
 - [Docker Deployment](#-docker-deployment)
-- [Testing](#-testing)
-- [Configuration](#-configuration)
+- [Testing & Quality Assurance](#-testing--quality-assurance)
+- [Configuration Architecture](#-configuration-architecture)
 - [MLOps Practices](#-mlops-practices)
 - [License](#-license)
 
 ---
 
+## ⚡ End-to-End Execution Guide: What to Run to Get What
+
+If someone clones this repository from scratch, here is the exact step-by-step sequence to run every component and what artifacts and outputs to expect:
+
+| Step | Command | What It Does | Key Output / Artifact |
+|:---:|---|---|---|
+| 1 | `poetry install` | Installs all dependencies in virtualenv | `.venv` environment |
+| 2 | `poetry run dvc pull` | Pulls dataset from remote storage | `data/raw/*.csv` |
+| 3 | `make feast-apply` | Applies Feast Feature Store schema | Feast feature registry |
+| 4 | `make feast-materialize` | Materializes SQLite online store | `src/features/feast_repo/data/online_store.db` |
+| 5 | `poetry run python main.py train` | Runs automated training pipeline | `models/champion_pipeline.joblib`, `results/metrics/` |
+| 6 | `poetry run python main.py uplift` | Trains EconML Causal Uplift T-Learner | `models/uplift/*`, `results/metrics/uplift_results.json` |
+| 7 | `poetry run python main.py benchmark` | Runs 10-model CV + Nadeau-Bengio t-test | `results/metrics/benchmark_results.json` |
+| 8 | `poetry run python main.py monitor` | Calculates decile PSI & Chi-sq drift | `results/metrics/drift_results.json`, `results/DRIFT_MONITORING_REPORT.md` |
+| 9 | `poetry run python main.py retrain` | Evaluates drift & runs challenger flow | Promoted model in MLflow / disk |
+| 10 | `poetry run python main.py serve` | Starts FastAPI server on port 8000 | Live REST API (`http://localhost:8000`) |
+| 11 | `make dashboard` | Launches Streamlit dashboard (8501) | Interactive UI (`http://localhost:8501`) |
+| 12 | `make docker-up` | Runs 5-container Compose stack | Complete containerized platform |
+| 13 | `make test` | Runs all 293 pytest tests | 100% test pass rate |
+| 14 | `make lint` | Checks flake8 and mypy strict typing | 0 lint / type errors |
+
+### Stage 1: Installation & Data Pull
+```bash
+# 1. Install all dependencies via Poetry
+poetry install
+
+# 2. Configure environment variables
+cp .env.example .env
+
+# 3. Pull dataset tracked by DVC (or ensure WA_Fn-UseC_-Telco-Customer-Churn.csv is in data/raw/)
+poetry run dvc pull
+```
+
+### Stage 2: Feature Store Initialization (Feast)
+```bash
+# Initialize and apply Feast feature store definition
+make feast-apply
+
+# Materialize batch features into online store for low-latency scoring
+make feast-materialize
+```
+*Output:* Creates `data/online_store.db` allowing sub-10ms customer lookup via `GET /predict/customer/{id}`.
+
+### Stage 3: Research Notebooks Exploration
+```bash
+# Research notebooks are pre-executed with cached charts in notebooks/*.ipynb
+# To re-execute all notebooks and update charts:
+make notebooks-exec
+```
+*Output:* Re-generates fully executed `.ipynb` notebooks in `notebooks/`.
+
+### Stage 4: Production Training Pipeline (Prefect Flow)
+```bash
+# Executes the production training pipeline outside notebooks:
+# Ingest -> Validate (Pandera) -> Train LightGBM -> Isotonic Calibration -> Fairness Audit -> Conformal Fit
+poetry run python main.py train
+# or: make pipeline-train
+```
+*Output Artifacts:*
+- `models/champion_pipeline.joblib`: Serialized calibrated Scikit-Learn pipeline.
+- `models/conformal/`: Fitted MAPIE conformal prediction artifacts.
+- MLflow experiment run with logged parameters, metrics, and registered model.
+
+### Stage 5: Causal Uplift (CATE) Prescriptive Modeling
+```bash
+# Trains an EconML T-Learner to isolate treatment effect of retention support
+poetry run python main.py uplift
+# or: make uplift-train
+```
+*Output Artifacts:*
+- `models/uplift/uplift_model.joblib`: Fitted CATE meta-learner.
+- `models/uplift/uplift_meta.json`: Feature alignments and schema metadata.
+- `results/metrics/uplift_results.json`: Customer quadrant breakdown (Persuadables, Sleeping Dogs).
+
+### Stage 6: Statistical Model Benchmarking Suite
+```bash
+# Runs 5-fold CV across 10 tabular models (LightGBM, CatBoost, XGBoost, TabPFN, FT-Transformer)
+# and evaluates pairwise differences using the Nadeau-Bengio corrected t-test
+poetry run python main.py benchmark
+# or: make benchmark
+```
+*Output Artifacts:*
+- `results/metrics/benchmark_results.json`: Complete fold scores, p-values, Cohen's $d$ effect sizes, and latency metrics.
+
+### Stage 7: Continuous Monitoring & Drift Detection
+```bash
+# Save training reference baseline snapshot (if not already saved)
+make save-reference
+
+# Generate data and prediction drift report
+poetry run python main.py monitor
+# or: make drift-report
+```
+*Output Artifacts:*
+- `results/metrics/drift_results.json`: Population Stability Index (PSI), Chi-sq p-values, and Wasserstein distance.
+- `results/DRIFT_MONITORING_REPORT.md`: Comprehensive executive drift documentation.
+
+### Stage 8: Automated Retraining & Champion-Challenger Promotion
+```bash
+# Evaluates drift triggers; if drift exceeds thresholds, trains challenger,
+# executes Nadeau-Bengio corrected CV t-test, and conditionally promotes
+poetry run python main.py retrain
+
+# To force retraining regardless of drift triggers:
+poetry run python main.py retrain --force
+```
+
+### Stage 9: Launch Serving API & Query Endpoints
+```bash
+# Start FastAPI server on port 8000
+poetry run python main.py serve --port 8000
+# or: make serve
+```
+
+```bash
+# In a second terminal — query single customer churn prediction:
+curl -s -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"gender":"Male","SeniorCitizen":0,"Partner":"Yes","Dependents":"No",
+       "tenure":2,"PhoneService":"Yes","MultipleLines":"No",
+       "InternetService":"Fiber optic","OnlineSecurity":"No","OnlineBackup":"No",
+       "DeviceProtection":"No","TechSupport":"No","StreamingTV":"No",
+       "StreamingMovies":"No","Contract":"Month-to-month","PaperlessBilling":"Yes",
+       "PaymentMethod":"Electronic check","MonthlyCharges":70.35,"TotalCharges":140.70}' | python -m json.tool
+```
+
+```bash
+# Query prescriptive Causal Uplift intervention:
+curl -s -X POST http://localhost:8000/uplift/predict \
+  -H "Content-Type: application/json" \
+  -d '{"gender":"Female","SeniorCitizen":0,"Partner":"No","Dependents":"No",
+       "tenure":4,"PhoneService":"Yes","MultipleLines":"No",
+       "InternetService":"Fiber optic","OnlineSecurity":"No","OnlineBackup":"No",
+       "DeviceProtection":"No","TechSupport":"No","StreamingTV":"No",
+       "StreamingMovies":"No","Contract":"Month-to-month","PaperlessBilling":"Yes",
+       "PaymentMethod":"Electronic check","MonthlyCharges":74.50,"TotalCharges":298.00}' | python -m json.tool
+```
+
+### Stage 10: Interactive Streamlit Dashboard
+```bash
+# Start the interactive UI
+make dashboard
+# Opens at: http://localhost:8501
+```
+
+### Stage 11: One-Command Docker Compose Stack
+```bash
+# Start API + Dashboard + MLflow + Prometheus + Grafana
+make docker-up
+
+# Verify services:
+# API:        http://localhost:8000/docs
+# Dashboard:  http://localhost:8501
+# MLflow:     http://localhost:5000
+# Prometheus: http://localhost:9090
+# Grafana:    http://localhost:3000
+```
+
+### Stage 12: Run Test Suite & Linting
+```bash
+# Run all 293+ unit and integration tests with coverage
+make test
+
+# Run style linting and strict static type checking
+make lint
+```
+
+---
+
 ## ✨ Key Features
 
-### 🧠 Machine Learning
-- **28 engineered features** across 6 groups (demographic, billing, service depth, contract, interaction, composite)
-- **5-stage consensus feature selection** (Variance → Correlation → Mutual Information → Random Forest → Permutation Importance)
-- **LightGBM** with Optuna-tuned hyperparameters and class-imbalance handling via `scale_pos_weight`
-- **Cost-matrix threshold optimization** — minimizes total business cost ($500/missed churner vs $20/false alarm)
-- **3-way stratified data split** (Train 70% / Validation 10% / Test 20%) to prevent data leakage
+### 🧠 Machine Learning & Causal AI
+- **28 engineered domain features** across 6 groups (contract dynamics, service adoption depth, billing friction, family isolation, composite risk).
+- **5-stage consensus feature selection** (Variance → Correlation → Mutual Information → Random Forest → Permutation Importance).
+- **LightGBM Champion** with Optuna Bayesian optimization and class-imbalance weighting.
+- **Cost-matrix threshold optimization** ($p^* = 0.34$) minimizing business losses ($C_{FN}=\$500$ vs $C_{FP}=\$50$).
+- **EconML T-Learner Causal Uplift Modeling** estimating Conditional Average Treatment Effects (CATE).
+- **MAPIE Split-Conformal Prediction** delivering 90% confidence uncertainty sets.
+- **EEOC 4/5ths Rule Fairness Auditing** verifying algorithmic parity across protected groups.
+- **Non-Parametric Isotonic Calibration** using Scikit-Learn 1.6+ `FrozenEstimator`.
 
-### 📈 Model Performance & Business ROI
-- **ROC-AUC:** `0.8225` | **PR-AUC:** `0.6071` | **Recall:** `0.9920`
-- **Cost-matrix optimization:** Saved **$170,140** over a baseline 'no-model' approach on the test set, by setting a mathematically optimal threshold of `0.03` based on $500/false negative and $20/false positive costs.
-
-### 🧪 Advanced MLOps & Modeling
-- **Conformal Prediction:** Generates 90% confidence sets for predictions.
-- **Bayesian HPO:** Automated tuning via `Optuna`.
-- **Fairness Auditing:** Tracks Equalized Odds and Demographic Parity across protected groups.
-- **Calibration Diagnostics:** Calculates Expected Calibration Error (ECE) and Brier Score, applying isotonic regression when needed.
-- **Uplift Modeling:** Evaluates true causal effect of retention interventions.
-- **Feature Store Integration:** Built-in `feast` hooks for online/offline feature serving.
-
-### 🚀 Production Serving
-- **FastAPI REST API** with single and batch prediction endpoints, Pydantic v2 validation, and OpenAPI docs
-- **Thread-safe lazy model loading** with automatic fallback chain (MLflow Registry → Local Training)
-- **Request tracing** via `X-Request-ID` UUID header on every response
-- **Risk tier classification** (High / Medium / Low) with actionable business recommendations
+### 🚀 Production Serving & Feature Store
+- **FastAPI REST API** with single, vectorized batch, and Feast real-time feature hydration endpoints.
+- **Sub-millisecond model loading** with disk fallback chain for cold-start resilience.
+- **Local SHAP Feature Attributions** identifying top churn drivers on every prediction.
+- **Feast Feature Store** supporting online entity lookup via `customer_id`.
+- **Request Tracing** via `X-Request-ID` UUID headers on all calls.
 
 ### 📊 Monitoring & Observability
-- **Real-time API Metrics**: Prometheus instrumentation tracking request volumes, error rates, latencies, and prediction distributions over time. Actively scraped from `/metrics`.
-- **Grafana Dashboards**: Live, out-of-the-box provisioned dashboard visualizing incoming prediction requests.
-- **Data drift detection** using PSI (numerical) and Chi-squared (categorical) statistical tests
-- **Prediction drift tracking** via relative mean shift against training baseline
-- **Config-driven thresholds** — all monitoring parameters tunable from YAML without code changes
-
-### 🐳 DevOps & Infrastructure
-- **Multi-stage Docker builds** — optimized for size (slim Python) and security (non-root user)
-- **Docker Compose** — one-command local stack (API + Dashboard + MLflow + Prometheus + Grafana)
-- **Continuous Integration (CI)** — automated linting, testing, and Docker image validation on every PR
-- **Continuous Deployment (CD)** — automated Docker build and push to GitHub Container Registry (GHCR) upon merges to `main`
-- **DVC** for dataset versioning, **Poetry** for dependency management
-
-### 🧪 Quality Assurance
-- **281 tests** (unit + integration) with **75% code coverage**
-- **Pandera schema validation** at ingestion and inference boundaries
-- **Pre-commit hooks** (Black, isort, Flake8) enforce consistent code style
-- **Type-safe configuration** — YAML configs loaded into Python dataclasses
+- **Prometheus Telemetry** scraping request counts, latencies, error rates, and probability histograms at `/metrics`.
+- **Pre-provisioned Grafana Dashboards** for real-time traffic and churn drift visualization.
+- **Population Stability Index (PSI)** and **Chi-squared tests** detecting data drift across numerical and categorical features.
+- **Wasserstein Distance** detecting model prediction drift.
+- **Automated Retraining Flows** gating challenger promotion with the **Nadeau-Bengio corrected t-test**.
 
 ---
 
@@ -89,26 +267,24 @@ A **production-grade Machine Learning Operations pipeline** that predicts custom
 ```
                          ┌─────────────────────────────────────────┐
                          │            GitHub Actions CI/CD         │
-                         │   Lint → Test (285) → Docker Build &    │
-                         │   Push Image to Container Registry      │
+                         │   Lint → Test (293) → Mypy → Build      │
                          └───────────────┬─────────────────────────┘
                                          │
     ┌────────────┐    ┌──────────┐    ┌──┴───────┐    ┌──────────────┐
-    │  Raw Data  │───▶│ Validate │───▶│ Feature  │───▶│   Train +    │
-    │  (DVC)     │    │ (Pandera)│    │  Store   │    │  Optimize    │
-    └────────────┘    └──────────┘    │(28 feats)│    │  (MLflow)    │
+    │  Raw Data  │───▶│ Validate │───▶│ Feature  │───▶│  Prefect     │
+    │  (DVC)     │    │ (Pandera)│    │  Store   │    │  Pipeline    │
+    └────────────┘    └──────────┘    │ (Feast)  │    │  (MLflow)    │
                                       └──────────┘    └──────┬───────┘
                                                              │
                                                     ┌────────┴────────┐
-                                                    │  sklearn.Pipeline│
-                                                    │ (FeatEng→Prep→  │
-                                                    │  Model)         │
+                                                    │ sklearn.Pipeline│
+                                                    │ (Calibrated)    │
                                                     └────────┬────────┘
                                                              │
          ┌─────────────┐    ┌──────────────┐    ┌────────────┴────────┐
          │  Streamlit   │◀──│  FastAPI      │◀──│  Model Loader       │
-         │  Dashboard   │   │  /predict     │   │  (MLflow→Local      │
-         │  (port 8501) │   │  (port 8000)  │   │   fallback)         │
+         │  Dashboard   │   │  /predict     │   │  (Instant Disk      │
+         │  (port 8501) │   │  /uplift      │   │   Fallback)         │
          └─────────────┘    └──────┬───────┘    └─────────────────────┘
                                    │
                     ┌──────────────┴───────────────┐
@@ -122,11 +298,6 @@ A **production-grade Machine Learning Operations pipeline** that predicts custom
                     └──────────────────────────────┘
 ```
 
-**Key Design Decisions:**
-1. **Training-Serving Parity** — The `sklearn.Pipeline` encapsulates feature engineering, preprocessing, and model inference into a single serializable object. Training-serving skew is structurally impossible.
-2. **Stateless Feature Engineering** — All 28 features are computed via pure functions, guaranteeing identical behavior in training and inference.
-3. **Cost-Sensitive, Not Accuracy-Driven** — The decision threshold is optimized using a business cost matrix, not the default 0.5 cutoff.
-
 ---
 
 ## 📂 Project Structure
@@ -134,59 +305,105 @@ A **production-grade Machine Learning Operations pipeline** that predicts custom
 ```
 customer-churn-mlops/
 │
-├── .github/workflows/         # CI/CD pipeline (lint, test, Docker build)
-│   └── ci.yml
+├── .github/workflows/         # CI/CD pipelines (lint, mypy, test, build)
+│   ├── ci.yml
+│   └── cd.yml
 │
-├── configs/                   # All configuration (YAML → Python dataclasses)
-│   ├── feature_config.yaml    #   Feature names, target column, engineered features
-│   ├── model_config.yaml      #   Algorithm, hyperparameters, cost matrix, performance gates
-│   ├── monitoring_config.yaml #   Drift thresholds (PSI, chi-squared, prediction drift)
-│   └── training_config.yaml   #   Split ratios, CV folds, experiment name
+├── configs/                   # Type-safe configuration (YAML -> Dataclasses)
+│   ├── feature_config.yaml    #   Raw & engineered feature specifications
+│   ├── model_config.yaml      #   Hyperparameters, cost matrix ($500/$50), thresholds
+│   ├── monitoring_config.yaml #   Drift alert thresholds (PSI, Chi-sq, Wasserstein)
+│   └── training_config.yaml   #   Split ratios, CV folds, random seeds
 │
-├── dashboards/                # Streamlit monitoring & prediction dashboard
+├── dashboards/                # Streamlit monitoring & prediction UI
 │   └── streamlit_app.py
 │
-├── data/
-│   ├── raw/                   # DVC-tracked raw dataset (Telco CSV)
-│   ├── processed/             # Intermediate artifacts (tuning results, etc.)
-│   └── reference/             # Drift monitoring reference snapshots (Parquet)
+├── data/                      # 4-tier data taxonomy (data/README.md)
+│   ├── raw/                   #   Immutable DVC-tracked raw dataset (Telco CSV)
+│   ├── processed/             #   Canonical preprocessed datasets & train/val/test splits (Parquet)
+│   ├── features/              #   Feast feature store offline storage (Parquet)
+│   └── reference/             #   Production drift reference snapshots (Parquet)
 │
-├── docker/                    # Containerization
-│   ├── Dockerfile             #   Multi-stage build for FastAPI API
-│   ├── Dockerfile.streamlit   #   Dashboard container
-│   ├── docker-compose.yml     #   Full local stack (API + Dashboard + MLflow)
-│   └── .dockerignore
+├── docker/                    # Containerization & local observability stack
+│   ├── Dockerfile             #   Multi-stage API container
+│   ├── Dockerfile.streamlit   #   Streamlit dashboard container
+│   ├── docker-compose.yml     #   5-service stack (API, UI, MLflow, Prometheus, Grafana)
+│   ├── prometheus.yml         #   Prometheus scrape config
+│   └── grafana/provisioning/  #   Pre-provisioned dashboards & data sources
 │
-├── notebooks/                 # Exploratory analysis & experiments
-│   ├── 01_eda_and_business_analysis.py
-│   ├── 02_feature_engineering_experiments.py
-│   ├── 03a_algorithm_scan.py
-│   ├── 03b_hyperparameter_tuning.py
-│   └── 03c_champion_evaluation.py
+├── docs/                      # Architectural manuals & operational guides
+│   ├── API.md                 #   REST API specifications & schemas
+│   ├── ARCHITECTURE.md        #   Layered system design & design decisions
+│   ├── DEPLOYMENT.md          #   Local, Docker Compose, and Kubernetes deployment
+│   └── MONITORING.md          #   Drift monitoring & champion-challenger retraining
 │
-├── reports/                   # Auto-generated plots (EDA, feature importance, etc.)
+├── models/                    # Serialized production model artifacts
+│   ├── champion_pipeline.joblib # Calibrated LightGBM champion pipeline
+│   ├── model_metadata.json    # Champion version, threshold & metrics metadata
+│   ├── conformal/             # MAPIE conformal prediction intervals & bounds
+│   ├── ft_transformer/        # Deep tabular FT-Transformer model checkpoints
+│   └── uplift/                # EconML CATE causal uplift meta-learner
 │
-├── scripts/                   # CLI utilities
-│   ├── save_reference_data.py #   Save training data for drift monitoring
-│   └── generate_drift_report.py #  Generate drift analysis report
+├── notebooks/                 # Experimental research notebooks (.ipynb)
+│   ├── 01_eda_and_business_analysis.ipynb
+│   ├── 02_feature_engineering_experiments.ipynb
+│   ├── 03a_algorithm_scan.ipynb
+│   ├── 03b_hyperparameter_tuning.ipynb
+│   ├── 03c_champion_evaluation.ipynb
+│   └── README.md
+│
+├── pipelines/                 # Production pipeline orchestration outside notebooks
+│   ├── training_pipeline.py   #   Full training, calibration, fairness & conformal flow
+│   └── retraining_pipeline.py #   Closed-loop drift check & champion-challenger promotion
+│
+├── results/                   # Unified Project Results & Reports (results/README.md)
+│   ├── MODEL_CARD.md          #   Production model card (Mitchell et al.)
+│   ├── BUSINESS_CASE_STUDY.md #   Unit economics & causal uplift ROI analysis
+│   ├── BENCHMARK_REPORT.md    #   10-algorithm benchmark with Nadeau-Bengio t-tests
+│   ├── DRIFT_MONITORING_REPORT.md # Drift detection, PSI & population stability
+│   ├── DATA_GOVERNANCE_REPORT.md  # Pandera contracts, feature lineage & privacy
+│   ├── metrics/               #   JSON evaluation results (champion, benchmark, conformal, uplift, drift)
+│   ├── tuning/                #   Optuna trials & algorithm sweep checkpoints (CSV/PKL)
+│   └── figures/               #   Hierarchically categorized visualization assets
+│       ├── eda/               #     Exploratory data analysis charts (01 to 09)
+│       ├── features/          #     Mutual info, correlation & selection curves
+│       ├── benchmarks/        #     Optuna sweeps & tuning history
+│       └── evaluation/        #     PR curves, confusion matrices, business impact
+│
+├── scripts/                   # CLI utilities & standalone jobs
+│   ├── prepare_feast_data.py  #   Generate Feast offline Parquet feature views
+│   ├── save_reference_data.py #   Save training baseline snapshot for drift monitoring
+│   ├── generate_drift_report.py # Compute PSI, Chi-sq & Wasserstein drift
+│   ├── train_uplift.py        #   Train Causal Uplift (CATE) T-Learner
+│   ├── train_conformal.py     #   Fit MAPIE conformal prediction wrapper
+│   └── run_benchmarks.py      #   Run 5-fold CV algorithm benchmarking
 │
 ├── src/                       # Production source code
 │   ├── data/                  #   Ingestion, validation (Pandera), preprocessing
 │   │   ├── ingest.py
 │   │   ├── validate.py
 │   │   └── preprocess.py
-│   ├── features/              #   Feature engineering & multi-stage selection
+│   ├── features/              #   Feature store & 5-stage consensus selection
 │   │   ├── feature_store.py
-│   │   └── feature_selector.py
-│   ├── models/                #   Training, evaluation, pipeline factory, threshold tuning
+│   │   ├── feature_selector.py
+│   │   └── feast_repo/        #   Feast Feature Store definition
+│   ├── models/                #   Training, evaluation, calibration, conformal, uplift
 │   │   ├── train.py
 │   │   ├── evaluate.py
 │   │   ├── pipeline.py
-│   │   └── threshold.py
+│   │   ├── threshold.py
+│   │   ├── conformal.py
+│   │   ├── uplift.py
+│   │   ├── fairness_audit.py
+│   │   ├── statistical_comparison.py
+│   │   ├── ft_transformer_wrapper.py
+│   │   ├── tabpfn_wrapper.py
+│   │   ├── hpo.py
+│   │   └── learning_curves.py
 │   ├── monitoring/            #   Data drift detection & reference management
 │   │   ├── drift_detector.py
 │   │   └── reference_builder.py
-│   ├── serving/               #   FastAPI prediction API
+│   ├── serving/               #   FastAPI prediction & causal uplift API
 │   │   ├── api.py
 │   │   ├── schemas.py
 │   │   └── model_loader.py
@@ -194,405 +411,164 @@ customer-churn-mlops/
 │       ├── config_loader.py
 │       └── logging.py
 │
-├── tests/                     # 281 tests (unit + integration + data validation)
+├── tests/                     # 293 tests (unit + integration + data validation)
 │   ├── conftest.py
 │   ├── unit/
 │   ├── integration/
 │   └── data_tests/
 │
-├── main.py                    # Training pipeline entry point
-├── pyproject.toml             # Poetry deps, pytest, Black, isort, Flake8, mypy config
+├── main.py                    # Unified CLI (train, retrain, monitor, uplift, benchmark, serve)
+├── pyproject.toml             # Poetry dependencies, pytest, Black, isort, Flake8, mypy config
 ├── Makefile                   # Developer workflow automation
-├── .pre-commit-config.yaml    # Git hooks for code quality
-└── .env.example               # Environment variable template
+└── .pre-commit-config.yaml    # Git hooks for code quality
 ```
 
 ---
 
-## 🚀 Quick Start
+## 💻 Operational Usage & CLI
 
-### Prerequisites
+The platform provides a unified CLI via [`main.py`](main.py) and developer workflows via [`Makefile`](Makefile).
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Python | 3.11+ | Runtime |
-| Poetry | 2.x | Dependency management |
-| Docker (optional) | 24+ | Container deployment |
-| Make (optional) | Any | Workflow automation |
-
-### Installation
+### Unified Operational CLI
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/deepakjangra/customer-churn-mlops.git
-cd customer-churn-mlops
+# Production Training Flow (Prefect + Feast + MLflow + Calibration + Conformal)
+poetry run python main.py train
 
-# 2. Install all dependencies (production + dev)
-poetry install
+# Drift-Triggered Automated Retraining (Champion vs Challenger with Nadeau-Bengio t-test)
+poetry run python main.py retrain
 
-# 3. Set up environment variables
-cp .env.example .env
-# Edit .env with your MLflow/DagsHub credentials (optional)
+# Population Drift & Feature Stability Monitoring
+poetry run python main.py monitor
 
-# 4. Pull the DVC-tracked dataset + install pre-commit hooks
-make setup
+# Causal Uplift (CATE) Intervention Modeling
+poetry run python main.py uplift
 
-# 5. Verify everything works
-make test
+# Tabular ML Benchmarks (LightGBM vs CatBoost vs XGBoost vs TabPFN vs FT-Transformer)
+poetry run python main.py benchmark
+
+# Production FastAPI Serving
+poetry run python main.py serve --port 8000
 ```
 
-### 30-Second Demo
-
-```bash
-# Train the model
-make train
-
-# Start the API
-make serve
-
-# In another terminal — predict churn
-curl -s http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"gender":"Male","SeniorCitizen":0,"Partner":"Yes","Dependents":"No",
-       "tenure":2,"PhoneService":"Yes","MultipleLines":"No",
-       "InternetService":"Fiber optic","OnlineSecurity":"No","OnlineBackup":"No",
-       "DeviceProtection":"No","TechSupport":"No","StreamingTV":"No",
-       "StreamingMovies":"No","Contract":"Month-to-month","PaperlessBilling":"Yes",
-       "PaymentMethod":"Electronic check","MonthlyCharges":70.35,"TotalCharges":140.70}' | python -m json.tool
-```
-
-**Expected Output:**
-```json
-{
-    "churn_probability": 0.8214,
-    "will_churn": true,
-    "risk_tier": "HIGH_RISK",
-    "threshold_used": 0.34,
-    "request_id": "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
-}
-```
-
----
-
-## 💻 Usage Guide
-
-All commands are available via the `Makefile`. Run `make help` to see all options.
+### Makefile Reference
 
 | Command | Description |
 |---------|-------------|
 | `make setup` | First-time setup (install deps, pre-commit hooks, DVC pull) |
-| `make train` | Run the full training pipeline with MLflow logging |
-| `make serve` | Start FastAPI prediction server (port 8000) |
+| `make pipeline-train` | Run automated Prefect production training pipeline |
+| `make pipeline-retrain` | Run drift-triggered champion-challenger retraining flow |
+| `make uplift-train` | Run Causal Uplift (CATE) prescriptive experiment |
+| `make benchmark` | Run cross-validation benchmark and Nadeau-Bengio statistical tests |
+| `make notebooks-exec` | Re-execute all research notebooks and update rendered outputs |
+| `make serve` | Start FastAPI prediction & uplift server (port 8000) |
 | `make dashboard` | Launch Streamlit monitoring dashboard (port 8501) |
-| `make test` | Run all 281 tests with coverage report |
+| `make test` | Run all 293+ tests with coverage report |
 | `make test-unit` | Run unit tests only |
 | `make test-integration` | Run integration tests only |
 | `make format` | Auto-format code (Black + isort) |
 | `make lint` | Run linters (Flake8 + mypy) |
 | `make drift-report` | Generate a data drift monitoring report |
-| `make docker-up` | Start full Docker Compose stack |
+| `make docker-up` | Start full Docker Compose stack (API, Streamlit, MLflow, Prometheus, Grafana) |
 | `make docker-down` | Stop all Docker containers |
-| `make clean` | Remove Python cache files |
-| `make feast-apply` | Apply Feast Feature Store registry |
-| `make feast-materialize` | Materialize Feast online store for low-latency serving |
-
-### Training Pipeline
-
-The training pipeline executes the following sequence:
-
-```
-Raw CSV → Validate (Pandera) → Preprocess → Engineer Features (28)
-       → 3-Way Split → Build sklearn.Pipeline → Train LightGBM
-       → Optimize Threshold (cost matrix) → Evaluate → Log to MLflow
-```
-
-```bash
-# Run training with MLflow tracking
-make train
-
-# Results are logged to:
-# - Terminal: metrics summary
-# - MLflow: full experiment (metrics, params, model artifact)
-# - reports/: evaluation plots (confusion matrix, feature importance, etc.)
-```
-
-### Prediction API
-
-```bash
-# Start with hot-reload (development)
-make serve
-
-# Access interactive docs
-open http://localhost:8000/docs
-```
-
-### Streamlit Dashboard
-
-```bash
-make dashboard
-# Opens at http://localhost:8501
-```
-
-The dashboard provides 4 tabs:
-1. **🎯 Predict** — Interactive single-customer churn prediction form
-2. **📋 Batch Analysis** — Upload CSV for bulk predictions (up to 100 customers)
-3. **📈 Model Performance** — Training metrics, confusion matrices, feature importance
-4. **💰 Business Impact** — ROI calculator showing dollar savings vs. no-model baseline
 
 ---
 
 ## 📡 API Reference
 
-### Endpoints
+### Serving Endpoints Summary
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/predict` | Single customer churn prediction |
-| `POST` | `/predict/batch` | Batch prediction (1–100 customers) |
-| `GET` | `/health` | Health check (for load balancers / k8s) |
-| `GET` | `/model/info` | Model metadata (version, features, threshold) |
-| `GET` | `/docs` | Interactive OpenAPI documentation |
+|---|---|---|
+| `POST` | `/predict` | Single customer churn prediction (SHAP + Conformal sets) |
+| `POST` | `/predict/batch` | Vectorized batch prediction (1–100 customers) |
+| `GET`  | `/predict/customer/{id}` | Real-time prediction fetching raw features from Feast online store |
+| `POST` | `/uplift/predict` | Causal CATE treatment effect and prescriptive quadrant |
+| `POST` | `/uplift/batch` | Batch prescriptive campaign assignment (Persuadables, Sleeping Dogs) |
+| `GET`  | `/uplift/info` | Causal model metadata (treatment feature, model type) |
+| `GET`  | `/model/info` | Production model metadata (algorithm, version, optimal threshold) |
+| `GET`  | `/health` | Health check for load balancers / k8s probes |
+| `GET`  | `/metrics` | Prometheus metrics scrape target |
+| `GET`  | `/docs` | Interactive OpenAPI documentation |
 
-### POST `/predict` — Request Body
-
-```json
-{
-    "gender": "Male",
-    "SeniorCitizen": 0,
-    "Partner": "Yes",
-    "Dependents": "No",
-    "tenure": 12,
-    "PhoneService": "Yes",
-    "MultipleLines": "No",
-    "InternetService": "Fiber optic",
-    "OnlineSecurity": "No",
-    "OnlineBackup": "Yes",
-    "DeviceProtection": "No",
-    "TechSupport": "No",
-    "StreamingTV": "No",
-    "StreamingMovies": "No",
-    "Contract": "Month-to-month",
-    "PaperlessBilling": "Yes",
-    "PaymentMethod": "Electronic check",
-    "MonthlyCharges": 70.35,
-    "TotalCharges": 844.20
-}
-```
-
-### POST `/predict` — Response
-
-```json
-{
-    "churn_probability": 0.5843,
-    "will_churn": true,
-    "risk_tier": "HIGH_RISK",
-    "threshold_used": 0.34,
-    "request_id": "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
-}
-```
-
-### Risk Tier Definitions
-
-| Tier | Threshold | Recommended Action |
-|------|-----------|-------------------|
-| 🔴 `HIGH_RISK` | probability ≥ 0.60 | Immediate personal outreach, retention offer |
-| 🟡 `MEDIUM_RISK` | 0.35 ≤ probability < 0.60 | Automated retention campaign, usage monitoring |
-| 🟢 `LOW_RISK` | probability < 0.35 | Standard engagement, cross-sell opportunities |
+*For complete curl commands, request bodies, and JSON schemas, see [**`docs/API.md`**](docs/API.md).*
 
 ---
 
 ## 🐳 Docker Deployment
 
-### Quick Start with Docker Compose
+Deploy the entire microservice ecosystem with Docker Compose:
 
 ```bash
-# Build and start all services
+# Build and start all 5 services
 docker compose -f docker/docker-compose.yml up --build -d
 
-# Services:
-#   API:        http://localhost:8000  (FastAPI + Swagger docs + /metrics)
-#   Dashboard:  http://localhost:8501  (Streamlit)
-#   MLflow:     http://localhost:5000  (Experiment tracker)
-#   Grafana:    http://localhost:3000  (Real-time dashboards)
+# Verify running services
+docker compose -f docker/docker-compose.yml ps
 
-# Stop all services
+# Services available:
+#   API:        http://localhost:8000/docs
+#   Dashboard:  http://localhost:8501
+#   MLflow:     http://localhost:5000
+#   Prometheus: http://localhost:9090
+#   Grafana:    http://localhost:3000
+
+# Stop services
 docker compose -f docker/docker-compose.yml down
 ```
 
-### Individual Images
-
-```bash
-# Build API image only
-docker build -f docker/Dockerfile -t churn-api:latest .
-
-# Run API container
-docker run -p 8000:8000 --env-file .env churn-api:latest
-```
-
-### Docker Architecture
-
-| Service | Image | Port | Purpose |
-|---------|-------|------|---------|
-| `api` | `churn-api` | 8000 | FastAPI prediction service |
-| `dashboard` | `churn-dashboard` | 8501 | Streamlit monitoring UI |
-| `mlflow` | `ghcr.io/mlflow/mlflow` | 5000 | Experiment tracking server |
-| `prometheus` | `prom/prometheus` | 9090 | Metrics scraper for the API |
-| `grafana` | `grafana/grafana`| 3000 | Real-time observability dashboards |
-
-**Design choices:**
-- Multi-stage builds minimize image size (builder exports deps → runtime uses slim Python)
-- Non-root `appuser` for security best practices
-- Built-in health checks for container orchestrators (Docker Swarm, k8s, ECS)
-- Internal Docker DNS for service-to-service communication (dashboard → API at `http://api:8000`)
-
 ---
 
-## 🧪 Testing
+## 🧪 Testing & Quality Assurance
 
-### Test Suite Overview
-
-```
-tests/
-├── conftest.py                    # Shared fixtures, config singleton reset
-├── unit/                          # Component-level tests
-│   ├── test_ingest.py             # Data loading
-│   ├── test_preprocess.py         # Preprocessing logic
-│   ├── test_validate.py           # Pandera schema validation
-│   ├── test_feature_store.py      # Feature engineering (28 features)
-│   ├── test_pipeline.py           # sklearn Pipeline factory
-│   ├── test_evaluate.py           # ML + business metrics
-│   ├── test_threshold.py          # Cost-optimal threshold, risk tiers
-│   ├── test_schemas.py            # Pydantic request/response schemas
-│   ├── test_config_loader.py      # Configuration loading + validation
-│   ├── test_logging.py            # Structured logging format
-│   ├── test_drift_detector.py     # PSI, chi-squared, prediction drift
-│   └── test_reference_builder.py  # Reference data Parquet round-trip
-├── integration/
-│   └── test_api.py                # FastAPI endpoint integration tests
-└── data_tests/
-    └── test_data_validation.py    # Raw data quality checks
-```
-
-### Running Tests
+The project enforces strict software engineering standards with **293 tests**:
 
 ```bash
-# Full suite with coverage
+# Run complete test suite
 make test
-# → 281 passed, 75% coverage
 
-# Unit tests only
-make test-unit
+# Run strict static type checking across all 33 source files
+poetry run mypy src/
 
-# Integration tests only
-make test-integration
-
-# Specific test file
-poetry run pytest tests/unit/test_drift_detector.py -v
-
-# With detailed coverage report
-poetry run pytest --cov=src --cov-report=html
-open htmlcov/index.html
+# Run flake8 style checks
+poetry run flake8 src/ tests/ scripts/
 ```
 
-### Test Philosophy
-
-| Principle | Implementation |
-|-----------|---------------|
-| **Isolation** | Config singleton reset between tests (`conftest.py`) |
-| **No side effects** | Tests use fixtures and `tmp_path`, never touch real data |
-| **Fast feedback** | Full suite completes in ~12 seconds |
-| **Realistic fixtures** | Test data mirrors actual Telco dataset schema and distributions |
+### Test Coverage Highlights
+- **Schema Contracts**: Pandera input schema validation and boundary checks.
+- **Unit Tests**: Pure function assertions for all 28 engineered features, cost-matrix optimization, calibration, and conformal prediction sets.
+- **Integration Tests**: FastAPI TestClient end-to-end verification of `/predict`, `/predict/batch`, `/predict/customer/{id}`, `/uplift/predict`, `/uplift/batch`, `/health`, and `/metrics`.
+- **Reproducibility**: Parameterized fixtures and deterministic random seeds.
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Configuration Architecture
 
-All configuration is managed through YAML files in `configs/` and loaded into typed Python dataclasses via `src/utils/config_loader.py`.
-
-### Config Files
-
-| File | Purpose | Key Settings |
-|------|---------|-------------|
-| `model_config.yaml` | Model algorithm, hyperparameters, cost matrix | `false_negative_cost: 500`, `false_positive_cost: 20` |
-| `feature_config.yaml` | Feature names, target column, engineered feature list | 28 engineered features across 6 groups |
-| `training_config.yaml` | Data splits, cross-validation, experiment name | `test_size: 0.2`, `val_size: 0.1`, `cv_folds: 5` |
-| `monitoring_config.yaml` | Drift detection thresholds | `psi_threshold: 0.25`, `chi_squared_alpha: 0.05` |
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-# MLflow / DagsHub (optional — local tracking used if not set)
-MLFLOW_TRACKING_URI=https://dagshub.com/username/repo.mlflow
-MLFLOW_TRACKING_USERNAME=your_username
-MLFLOW_TRACKING_PASSWORD=your_token
-
-# DVC remote storage
-DVC_REMOTE_URL=https://dagshub.com/username/repo.dvc
-
-# API configuration
-API_HOST=0.0.0.0
-API_PORT=8000
-```
+All operational settings are decoupled from code into YAML files in `configs/`:
+- [`configs/feature_config.yaml`](configs/feature_config.yaml): Feature types, target column, engineered feature definitions.
+- [`configs/model_config.yaml`](configs/model_config.yaml): Hyperparameters, cost matrix ($C_{FN}=500, C_{FP}=50$), performance gates.
+- [`configs/training_config.yaml`](configs/training_config.yaml): Split ratios (70/10/20), cross-validation folds ($K=5$).
+- [`configs/monitoring_config.yaml`](configs/monitoring_config.yaml): Drift alert limits (PSI = 0.25, Chi-sq $\alpha = 0.05$, prediction drift = 0.15).
 
 ---
 
 ## 🔄 MLOps Practices
 
-This project demonstrates the following MLOps maturity practices:
+| Dimension | Engineering Implementation |
+|---|---|
+| **Data Versioning** | DVC tracks raw datasets with remote hash verification |
+| **Data Validation** | Pandera enforces column types, missingness, and range constraints at ingestion |
+| **Feature Store** | Feast materializes features to online store for real-time inference |
+| **Pipeline Parity** | `sklearn.Pipeline` encapsulates feature engineering, scaling, and classification |
+| **Experiment Tracking** | MLflow logs parameters, metrics, confusion matrices, and model artifacts |
+| **Model Registry** | MLflow Model Registry manages champion-challenger transitions |
+| **Continuous Integration** | GitHub Actions runs lint, mypy type checks, and 293 pytest tests on every PR |
+| **Continuous Deployment** | Automated multi-stage Docker image builds and verification |
+| **Drift Detection** | Decile PSI, Chi-squared goodness-of-fit, and Wasserstein distance tracking |
+| **Telemetry & Observability** | Prometheus time-series metrics scraped into provisioned Grafana dashboards |
 
-### Data Management
-| Practice | Implementation |
-|----------|---------------|
-| Data versioning | DVC tracks raw datasets independently from Git |
-| Schema validation | Pandera enforces column types, ranges, and allowed values |
-| Training-serving parity | `sklearn.Pipeline` encapsulates the full transformation chain |
-| Reference snapshots | Parquet-based training data snapshots for drift comparison |
-
-### Model Lifecycle
-| Practice | Implementation |
-|----------|---------------|
-| Experiment tracking | MLflow logs all params, metrics, and model artifacts |
-| Model registry | MLflow Model Registry with staging/production stages |
-| Performance gates | Minimum ROC-AUC (0.82), PR-AUC (0.65), Recall (0.70) required |
-| Reproducibility | Fixed random seeds, locked dependencies (poetry.lock), DVC |
-
-### Deployment & Monitoring
-| Practice | Implementation |
-|----------|---------------|
-| Containerization | Multi-stage Docker builds with persistent data volumes |
-| CI/CD | GitHub Actions: Push to GHCR on main branch with parallel test/lint gates |
-| Data drift monitoring | PSI (numerical), Chi-squared (categorical), prediction drift |
-| Observability | Prometheus `/metrics` scraping, Grafana live Dashboards, Request ID tracing |
-
-### Code Quality
-| Practice | Implementation |
-|----------|---------------|
-| Testing | 281 tests, 75% coverage, unit + integration + data validation |
-| Linting | Black (formatting), isort (imports), Flake8 (style), mypy (types) |
-| Pre-commit hooks | Automated checks before every commit |
-| Modular architecture | Clean separation: data → features → models → serving → monitoring |
-
-
+---
 
 ## 📄 License
 
-This project is open source and available under the [MIT License](LICENSE).
-
----
-
-## 🙏 Acknowledgements
-
-- [Telco Customer Churn Dataset](https://www.kaggle.com/blastchar/telco-customer-churn) — IBM/Kaggle
-- [LightGBM](https://lightgbm.readthedocs.io/) — Microsoft
-- [MLflow](https://mlflow.org/) — Databricks
-- [FastAPI](https://fastapi.tiangolo.com/) — Sebastián Ramírez
-- [Scikit-learn](https://scikit-learn.org/) — Community
-- [Pandera](https://pandera.readthedocs.io/) — Niels Bantilan
-
----
-
-<p align="center">
-<em>Building data science that aligns tightly with engineering rigor and business impact.</em>
-</p>
+This project is licensed under the [MIT License](LICENSE).

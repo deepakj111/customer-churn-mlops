@@ -1,280 +1,380 @@
-# API Documentation
+# API Reference Manual
 
-Detailed documentation for the Customer Churn Prediction API.
-
----
-
-## Overview
-
-The prediction API is built with [FastAPI](https://fastapi.tiangolo.com/) and serves the trained LightGBM churn prediction model. It provides real-time single and batch predictions with full request tracing.
-
-**Base URL:** `http://localhost:8000` (local) or `http://api:8000` (Docker Compose)
-
-**Interactive API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI)
+REST API reference documentation for the **Customer Churn Prediction & Causal AI Platform**.
 
 ---
 
-## Authentication
+## 1. Overview
 
-The API does not currently require authentication for development use. In production, add JWT or API key authentication via FastAPI middleware.
+The production serving engine is built with [FastAPI](https://fastapi.tiangolo.com/) and provides dual operational capabilities:
+1. **Predictive Churn Engine**: Scores 30-to-90 day forward churn probabilities using an isotonic-calibrated LightGBM pipeline with SHAP local explainability and MAPIE conformal prediction uncertainty sets.
+2. **Prescriptive Causal Uplift Engine**: Estimates the Conditional Average Treatment Effect (CATE) using an EconML T-Learner to recommend cost-optimal retention interventions across customer behavioral quadrants.
+3. **Real-Time Feature Hydration**: Connects to the **Feast Feature Store** to score active subscribers directly by `customer_id`.
+
+**Base URLs:**
+- Local Development: `http://localhost:8000`
+- Docker Compose: `http://api:8000` (internal network) / `http://localhost:8000` (host port)
+- Interactive Swagger UI: [`http://localhost:8000/docs`](http://localhost:8000/docs)
+- Interactive ReDoc: [`http://localhost:8000/redoc`](http://localhost:8000/redoc)
 
 ---
 
-## Endpoints
+## 2. Authentication & Headers
 
-### POST `/predict` — Single Prediction
+In local and testing modes, endpoints are open. In production, authenticate requests using an `Authorization: Bearer <JWT>` header via reverse-proxy or API Gateway.
 
-Predict churn probability for a single customer.
+### Request Tracing Header
+Every API request receives a unique UUID4 trace identifier:
+- Returned in HTTP response headers: `X-Request-ID: 7a9e1d84-4b53-48b2-b1e8-782d49e1501b`
+- Included in all response JSON payloads: `"request_id": "7a9e1d84-4b53-48b2-b1e8-782d49e1501b"`
+- Automatically injected into server logs for distributed cross-system debugging.
 
-**Request Body:**
+---
 
-| Field | Type | Required | Constraints | Example |
-|-------|------|----------|-------------|---------|
-| `gender` | string | ✅ | `Male` or `Female` | `"Male"` |
-| `SeniorCitizen` | integer | ✅ | `0` or `1` | `0` |
-| `Partner` | string | ✅ | `Yes` or `No` | `"Yes"` |
-| `Dependents` | string | ✅ | `Yes` or `No` | `"No"` |
-| `tenure` | integer | ✅ | ≥ 0 | `12` |
-| `PhoneService` | string | ✅ | `Yes` or `No` | `"Yes"` |
-| `MultipleLines` | string | ✅ | `Yes`, `No`, `No phone service` | `"No"` |
-| `InternetService` | string | ✅ | `DSL`, `Fiber optic`, `No` | `"Fiber optic"` |
-| `OnlineSecurity` | string | ✅ | `Yes`, `No`, `No internet service` | `"No"` |
-| `OnlineBackup` | string | ✅ | `Yes`, `No`, `No internet service` | `"Yes"` |
-| `DeviceProtection` | string | ✅ | `Yes`, `No`, `No internet service` | `"No"` |
-| `TechSupport` | string | ✅ | `Yes`, `No`, `No internet service` | `"No"` |
-| `StreamingTV` | string | ✅ | `Yes`, `No`, `No internet service` | `"No"` |
-| `StreamingMovies` | string | ✅ | `Yes`, `No`, `No internet service` | `"No"` |
-| `Contract` | string | ✅ | `Month-to-month`, `One year`, `Two year` | `"Month-to-month"` |
-| `PaperlessBilling` | string | ✅ | `Yes` or `No` | `"Yes"` |
-| `PaymentMethod` | string | ✅ | See allowed values below | `"Electronic check"` |
-| `MonthlyCharges` | float | ✅ | > 0 | `70.35` |
-| `TotalCharges` | float | ✅ | ≥ 0 | `844.20` |
+## 3. Serving Endpoints Summary
 
-**Allowed `PaymentMethod` values:**
-- `Electronic check`
-- `Mailed check`
-- `Bank transfer (automatic)`
-- `Credit card (automatic)`
+| Method | Path | Category | Description |
+|---|---|---|---|
+| `POST` | `/predict` | Predictive ML | Single customer prediction with SHAP & Conformal bounds |
+| `POST` | `/predict/batch` | Predictive ML | Vectorized batch prediction (1–100 customers) |
+| `GET`  | `/predict/customer/{customer_id}` | Feature Store | Real-time prediction fetching raw features from Feast online store |
+| `POST` | `/uplift/predict` | Causal AI | Single customer CATE uplift & prescriptive intervention recommendation |
+| `POST` | `/uplift/batch` | Causal AI | Batch prescriptive campaign assignment with quadrant summary |
+| `GET`  | `/uplift/info` | Causal AI | Causal model metadata (treatment feature, model type, feature count) |
+| `GET`  | `/model/info` | Diagnostics | Production model metadata (algorithm, version, optimal threshold) |
+| `GET`  | `/health` | System | Health check for Kubernetes liveness/readiness probes |
+| `GET`  | `/metrics` | Observability | Prometheus metrics scraping endpoint |
 
-**Example Request:**
+---
+
+## 4. Predictive Churn Endpoints
+
+### POST `/predict` — Single Customer Prediction
+
+Evaluates a single customer record through the full 47-feature pipeline (19 raw + 28 engineered domain features), returning calibrated probability, risk tier, local SHAP explanation, and distribution-free conformal prediction bounds.
+
+#### Request Schema (`CustomerFeatures`)
+
+```json
+{
+  "gender": "Male",
+  "SeniorCitizen": 0,
+  "Partner": "Yes",
+  "Dependents": "No",
+  "tenure": 12,
+  "PhoneService": "Yes",
+  "MultipleLines": "No",
+  "InternetService": "Fiber optic",
+  "OnlineSecurity": "No",
+  "OnlineBackup": "Yes",
+  "DeviceProtection": "No",
+  "TechSupport": "No",
+  "StreamingTV": "No",
+  "StreamingMovies": "No",
+  "Contract": "Month-to-month",
+  "PaperlessBilling": "Yes",
+  "PaymentMethod": "Electronic check",
+  "MonthlyCharges": 70.35,
+  "TotalCharges": 844.20
+}
+```
+
+#### Field Constraints
+- `gender`: `"Male" | "Female"`
+- `SeniorCitizen`: `0 | 1`
+- `Partner`, `Dependents`, `PhoneService`, `PaperlessBilling`: `"Yes" | "No"`
+- `MultipleLines`: `"Yes" | "No" | "No phone service"`
+- `InternetService`: `"DSL" | "Fiber optic" | "No"`
+- `OnlineSecurity`, `OnlineBackup`, `DeviceProtection`, `TechSupport`, `StreamingTV`, `StreamingMovies`: `"Yes" | "No" | "No internet service"`
+- `Contract`: `"Month-to-month" | "One year" | "Two year"`
+- `PaymentMethod`: `"Electronic check" | "Mailed check" | "Bank transfer (automatic)" | "Credit card (automatic)"`
+- `tenure`: integer $\ge 0$
+- `MonthlyCharges`: float $> 0$
+- `TotalCharges`: float $\ge 0$ (validated: $\text{TotalCharges} \le \text{MonthlyCharges} \times (\text{tenure} + 1) \times 1.5$)
+
+#### cURL Example
 ```bash
 curl -X POST "http://localhost:8000/predict" \
      -H "Content-Type: application/json" \
      -d '{
-           "gender": "Male",
-           "SeniorCitizen": 0,
-           "Partner": "Yes",
-           "Dependents": "No",
-           "tenure": 12,
-           "PhoneService": "Yes",
-           "MultipleLines": "No",
-           "InternetService": "Fiber optic",
-           "OnlineSecurity": "No",
-           "OnlineBackup": "Yes",
-           "DeviceProtection": "No",
-           "TechSupport": "No",
-           "StreamingTV": "No",
-           "StreamingMovies": "No",
-           "Contract": "Month-to-month",
-           "PaperlessBilling": "Yes",
-           "PaymentMethod": "Electronic check",
-           "MonthlyCharges": 70.35,
-           "TotalCharges": 844.20
-         }'
+       "gender": "Female",
+       "SeniorCitizen": 1,
+       "Partner": "No",
+       "Dependents": "No",
+       "tenure": 2,
+       "PhoneService": "Yes",
+       "MultipleLines": "No",
+       "InternetService": "Fiber optic",
+       "OnlineSecurity": "No",
+       "OnlineBackup": "No",
+       "DeviceProtection": "No",
+       "TechSupport": "No",
+       "StreamingTV": "Yes",
+       "StreamingMovies": "Yes",
+       "Contract": "Month-to-month",
+       "PaperlessBilling": "Yes",
+       "PaymentMethod": "Electronic check",
+       "MonthlyCharges": 95.50,
+       "TotalCharges": 191.00
+     }'
 ```
 
-**Response (200 OK):**
+#### Response Payload (`PredictionResponse`)
 ```json
 {
-    "churn_probability": 0.5843,
-    "will_churn": true,
-    "risk_tier": "HIGH_RISK",
-    "threshold_used": 0.34,
-    "request_id": "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
+  "churn_probability": 0.7421,
+  "risk_tier": "HIGH_RISK",
+  "will_churn": true,
+  "threshold_used": 0.34,
+  "explainability": {
+    "is_month_to_month": 0.312,
+    "fiber_no_security": 0.184,
+    "tenure": -0.142
+  },
+  "conformal_prediction": {
+    "prediction_set": ["Churn"],
+    "confidence_level": 0.90,
+    "is_uncertain": false
+  },
+  "request_id": "7a9e1d84-4b53-48b2-b1e8-782d49e1501b"
 }
 ```
-
-**Response Fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `churn_probability` | float | Predicted probability of churn (0.0 to 1.0) |
-| `will_churn` | boolean | Binary prediction based on the cost-optimal threshold |
-| `risk_tier` | string | `HIGH_RISK`, `MEDIUM_RISK`, or `LOW_RISK` |
-| `threshold_used` | float | Decision threshold used for binary classification |
-| `request_id` | string | Unique UUID for request tracing in logs |
 
 ---
 
 ### POST `/predict/batch` — Batch Prediction
 
-Predict churn for multiple customers in a single request.
+Processes 1 to 100 customer records in an efficient, vectorized batch call.
 
-**Request Body:**
-```json
-{
-    "customers": [
-        { ...customer_1_features... },
-        { ...customer_2_features... }
-    ]
-}
+#### cURL Example
+```bash
+curl -X POST "http://localhost:8000/predict/batch" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "customers": [
+         {
+           "gender": "Male", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "No",
+           "tenure": 12, "PhoneService": "Yes", "MultipleLines": "No",
+           "InternetService": "Fiber optic", "OnlineSecurity": "No", "OnlineBackup": "Yes",
+           "DeviceProtection": "No", "TechSupport": "No", "StreamingTV": "No",
+           "StreamingMovies": "No", "Contract": "Month-to-month", "PaperlessBilling": "Yes",
+           "PaymentMethod": "Electronic check", "MonthlyCharges": 70.35, "TotalCharges": 844.20
+         },
+         {
+           "gender": "Female", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "Yes",
+           "tenure": 60, "PhoneService": "Yes", "MultipleLines": "Yes",
+           "InternetService": "DSL", "OnlineSecurity": "Yes", "OnlineBackup": "Yes",
+           "DeviceProtection": "Yes", "TechSupport": "Yes", "StreamingTV": "No",
+           "StreamingMovies": "No", "Contract": "Two year", "PaperlessBilling": "No",
+           "PaymentMethod": "Credit card (automatic)", "MonthlyCharges": 55.00, "TotalCharges": 3300.00
+         }
+       ]
+     }'
 ```
 
-**Constraints:**
-- Maximum 100 customers per batch request
-- Each customer object follows the same schema as `/predict`
-
-**Response (200 OK):**
+#### Response Payload (`BatchPredictionResponse`)
 ```json
 {
-    "predictions": [
-        {
-            "churn_probability": 0.5843,
-            "will_churn": true,
-            "risk_tier": "HIGH_RISK",
-            "threshold_used": 0.34
-        },
-        {
-            "churn_probability": 0.1205,
-            "will_churn": false,
-            "risk_tier": "LOW_RISK",
-            "threshold_used": 0.34
-        }
-    ],
-    "total_customers": 2,
-    "high_risk_count": 1,
-    "medium_risk_count": 0,
-    "low_risk_count": 1,
-    "request_id": "b2c3d4e5-f6a7-8901-bcde-2345678901bc"
-}
-```
-
----
-
-### GET `/health` — Health Check
-
-Returns the API's operational status. Used by load balancers, Docker health checks, and Kubernetes probes.
-
-**Response (200 OK):**
-```json
-{
-    "status": "healthy",
-    "model_loaded": true,
-    "version": "0.1.0"
-}
-```
-
-> **Note:** `model_loaded: false` means the model hasn't been loaded yet (lazy loading). The first `/predict` request triggers model loading. The API is still "healthy" — it just hasn't received its first prediction request yet.
-
----
-
-### GET `/model/info` — Model Information
-
-Returns metadata about the currently loaded model. Useful for debugging and audit trails.
-
-**Response (200 OK):**
-```json
-{
-    "model_name": "customer-churn-lgbm",
-    "model_version": "local-dev",
-    "mlflow_run_id": null,
-    "optimal_threshold": 0.34,
-    "algorithm": "lightgbm",
-    "feature_count": 47,
-    "source": "local_training"
+  "predictions": [
+    {
+      "churn_probability": 0.5843,
+      "risk_tier": "HIGH_RISK",
+      "will_churn": true,
+      "threshold_used": 0.34,
+      "explainability": { "is_month_to_month": 0.281, "tenure": -0.112 },
+      "conformal_prediction": { "prediction_set": ["Churn"], "confidence_level": 0.90, "is_uncertain": false },
+      "request_id": "8b0f2e95-5c64-49c3-c2f9-893e50f2612c"
+    },
+    {
+      "churn_probability": 0.0412,
+      "risk_tier": "LOW_RISK",
+      "will_churn": false,
+      "threshold_used": 0.34,
+      "explainability": { "is_committed_customer": -0.345, "tenure": -0.210 },
+      "conformal_prediction": { "prediction_set": ["Stay"], "confidence_level": 0.90, "is_uncertain": false },
+      "request_id": "8b0f2e95-5c64-49c3-c2f9-893e50f2612c"
+    }
+  ],
+  "total_customers": 2,
+  "high_risk_count": 1,
+  "medium_risk_count": 0,
+  "low_risk_count": 1,
+  "avg_churn_probability": 0.3128,
+  "request_id": "8b0f2e95-5c64-49c3-c2f9-893e50f2612c"
 }
 ```
 
 ---
 
-### GET `/metrics` — Prometheus Metrics
+### GET `/predict/customer/{customer_id}` — Feast Feature Store Real-Time Prediction
 
-Exposes standard Prometheus metrics generated by the `prometheus_client` library natively from the FastAPI application. Read by Prometheus scrapers to build live-monitoring dashboards (e.g., Grafana).
+Fetches live entity attributes for a customer directly from the **Feast Online Store** (SQLite/Redis), hydrating all 19 raw features and routing through the serving pipeline in $< 10$ milliseconds.
 
-**Metrics Tracked:**
-- `prediction_requests_total`: Counter for total requests split by endpoint.
-- `prediction_errors_total`: Counter for inference failures split by endpoint.
-- `prediction_latency_seconds`: Histogram tracking latency overhead.
-- `churn_prediction_probability`: Histogram tracking distribution ranges of generated probability scores.
+#### cURL Example
+```bash
+curl -X GET "http://localhost:8000/predict/customer/7590-VHVEG"
+```
 
-**Response Type:** `text/plain; version=0.0.4; charset=utf-8`
+#### Response Payload
+Identical to `POST /predict`. Returns `404 Not Found` if the customer entity has not been materialized to Feast.
 
 ---
 
-## Error Handling
+## 5. Causal Uplift (Prescriptive Retention) Endpoints
 
-All errors return structured JSON responses:
+### POST `/uplift/predict` — Single Customer Causal Intervention Prediction
 
-### 422 — Validation Error
+Estimates the **Conditional Average Treatment Effect (CATE)** of offering a proactive retention package (TechSupport bundle) to an eligible subscriber. Rather than just asking *"Will this customer leave?"*, it determines *"Will offering this intervention save them, or will it provoke them to leave?"*
 
-Returned when request data fails Pydantic validation.
+#### cURL Example
+```bash
+curl -X POST "http://localhost:8000/uplift/predict" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "gender": "Female",
+       "SeniorCitizen": 0,
+       "Partner": "No",
+       "Dependents": "No",
+       "tenure": 4,
+       "PhoneService": "Yes",
+       "MultipleLines": "No",
+       "InternetService": "Fiber optic",
+       "OnlineSecurity": "No",
+       "OnlineBackup": "No",
+       "DeviceProtection": "No",
+       "TechSupport": "No",
+       "StreamingTV": "No",
+       "StreamingMovies": "No",
+       "Contract": "Month-to-month",
+       "PaperlessBilling": "Yes",
+       "PaymentMethod": "Electronic check",
+       "MonthlyCharges": 74.50,
+       "TotalCharges": 298.00
+     }'
+```
 
+#### Response Payload (`UpliftPredictionResponse`)
 ```json
 {
-    "detail": "Validation error",
-    "request_id": "c3d4e5f6-a7b8-9012-cdef-3456789012cd",
-    "errors": [
-        {
-            "loc": ["body", "MonthlyCharges"],
-            "msg": "Input should be greater than 0",
-            "type": "greater_than"
-        }
-    ]
+  "cate": -0.1245,
+  "uplift_segment": "Persuadable (Target)",
+  "recommended_action": "Intervene: Target customer. Proactively offer retention bundle.",
+  "base_churn_probability": 0.6840,
+  "request_id": "9c1a3b84-6d75-40e4-d3ba-904f61a3723d"
 }
 ```
 
-### 500 — Internal Server Error
+#### Prescriptive Quadrants
+1. **Persuadables (`uplift_segment = "Persuadable (Target)"`)**:
+   - Condition: $p_{\text{base}} \ge 0.50 \land \text{CATE} \le -0.05$
+   - Strategy: **Top retention priority**. Intervention significantly reduces churn probability.
+2. **Sure Things (`uplift_segment = "Sure Thing (Ignore)"`)**:
+   - Condition: $p_{\text{base}} < 0.50 \land \text{CATE} \le 0.00$
+   - Strategy: **Do not intervene**. Customer will stay organic; discounts waste budget.
+3. **Lost Causes (`uplift_segment = "Lost Cause (Ignore)"`)**:
+   - Condition: $p_{\text{base}} \ge 0.50 \land \text{CATE} > -0.05$
+   - Strategy: **Do not intervene**. High churn probability is insensitive to standard retention perks.
+4. **Sleeping Dogs (`uplift_segment = "Sleeping Dog (Do Not Disturb)"`)**:
+   - Condition: $p_{\text{base}} < 0.50 \land \text{CATE} > 0.00$
+   - Strategy: **STRICT SUPPRESSION**. Contacting these customers triggers dissatisfaction or plan comparison, inducing churn.
 
-Returned when the model fails to load or an unexpected error occurs.
+---
 
+### POST `/uplift/batch` — Batch Causal Uplift Allocation
+
+Evaluates 1 to 100 customers and aggregates campaign allocation counts across the four prescriptive quadrants.
+
+#### Response Payload (`BatchUpliftResponse`)
 ```json
 {
-    "detail": "Model loading failed. Check the logs for details.",
-    "request_id": "d4e5f6a7-b8c9-0123-defa-4567890123de"
+  "predictions": [ ...list of UpliftPredictionResponse... ],
+  "total_customers": 50,
+  "persuadables_count": 14,
+  "sure_things_count": 26,
+  "lost_causes_count": 7,
+  "sleeping_dogs_count": 3,
+  "request_id": "a2d4f618-7e86-41f5-e4cb-015a72b4834e"
 }
 ```
 
 ---
 
-## Request Tracing
+### GET `/uplift/info` — Causal Model Metadata
 
-Every response includes an `X-Request-ID` header containing the unique request UUID. This ID also appears in:
-- The response body (`request_id` field)
-- Server logs (searchable for debugging)
-- Error responses
+Returns architecture and feature alignment specifications for the loaded EconML T-Learner model.
 
-**Example:**
+#### Response Payload
+```json
+{
+  "feature_cols": [
+    "tenure", "MonthlyCharges", "TotalCharges", "is_month_to_month",
+    "service_adoption_count", "has_protection_bundle", ...
+  ],
+  "treatment_feature": "TechSupport",
+  "model_type": "TLearner (LGBMClassifier)",
+  "eligible_customers": 3473
+}
 ```
-X-Request-ID: a1b2c3d4-e5f6-7890-abcd-1234567890ab
-```
-
-Use this ID when reporting issues or debugging production problems.
 
 ---
 
-## Rate Limits
+## 6. System & Observability Endpoints
 
-No rate limiting is currently implemented. For production deployment, consider adding rate limiting via:
-- Nginx reverse proxy (`limit_req_zone`)
-- FastAPI middleware (`slowapi`)
-- Cloud load balancer settings
+### GET `/health` — Operational Readiness Check
+
+Used by Kubernetes liveness and readiness probes to confirm container health and model cache status.
+
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "version": "0.1.0"
+}
+```
+
+### GET `/model/info` — Production Model Audit Metadata
+
+```json
+{
+  "model_name": "customer-churn-lgbm",
+  "model_version": "1.0.0-calibrated",
+  "mlflow_run_id": "b3e94a8f102c4819a71db3f05",
+  "optimal_threshold": 0.34,
+  "algorithm": "LightGBMClassifier",
+  "feature_count": 47
+}
+```
+
+### GET `/metrics` — Prometheus Metrics Scraping
+
+Exposes Prometheus format metrics for real-time observability:
+- `prediction_requests_total{endpoint="..."}`: Counter tracking requests per endpoint.
+- `prediction_errors_total{endpoint="..."}`: Counter tracking error responses.
+- `prediction_latency_seconds{endpoint="..."}`: Histogram of response latencies.
+- `churn_prediction_probability`: Histogram distribution of predicted probabilities.
+- `uplift_requests_total{endpoint="..."}`: Counter tracking causal inference requests.
 
 ---
 
-## Python Client Example
+## 7. Python Client Example (Complete Workflow)
 
 ```python
+"""
+End-to-end Python client demonstration:
+1. Churn risk scoring with SHAP & Conformal bounds
+2. Prescriptive Causal Uplift decision routing
+"""
+
 import requests
 
-API_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8000"
 
-# Single prediction
-customer = {
+customer_payload = {
     "gender": "Female",
-    "SeniorCitizen": 1,
+    "SeniorCitizen": 0,
     "Partner": "No",
     "Dependents": "No",
-    "tenure": 1,
+    "tenure": 3,
     "PhoneService": "Yes",
     "MultipleLines": "No",
     "InternetService": "Fiber optic",
@@ -282,19 +382,34 @@ customer = {
     "OnlineBackup": "No",
     "DeviceProtection": "No",
     "TechSupport": "No",
-    "StreamingTV": "No",
+    "StreamingTV": "Yes",
     "StreamingMovies": "No",
     "Contract": "Month-to-month",
     "PaperlessBilling": "Yes",
     "PaymentMethod": "Electronic check",
-    "MonthlyCharges": 95.00,
-    "TotalCharges": 95.00,
+    "MonthlyCharges": 79.85,
+    "TotalCharges": 239.55,
 }
 
-response = requests.post(f"{API_URL}/predict", json=customer)
-result = response.json()
+# 1. Step 1: Predict Churn Risk
+pred_resp = requests.post(f"{BASE_URL}/predict", json=customer_payload)
+pred_resp.raise_for_status()
+pred = pred_resp.json()
 
-print(f"Churn Probability: {result['churn_probability']:.1%}")
-print(f"Risk Tier: {result['risk_tier']}")
-print(f"Will Churn: {result['will_churn']}")
+print(f"--- PREDICTION [Request ID: {pred['request_id']}] ---")
+print(f"Churn Probability : {pred['churn_probability']:.2%}")
+print(f"Risk Tier         : {pred['risk_tier']}")
+print(f"Optimal Threshold : {pred['threshold_used']}")
+print(f"Top Drivers       : {pred['explainability']}")
+print(f"Conformal Set     : {pred['conformal_prediction']['prediction_set']}\n")
+
+# 2. Step 2: Query Causal Uplift for Actionable Retention Policy
+uplift_resp = requests.post(f"{BASE_URL}/uplift/predict", json=customer_payload)
+uplift_resp.raise_for_status()
+uplift = uplift_resp.json()
+
+print(f"--- PRESCRIPTIVE ACTION ---")
+print(f"Estimated CATE    : {uplift['cate']:+.4f} (churn reduction effect)")
+print(f"Quadrant          : {uplift['uplift_segment']}")
+print(f"Action Policy     : {uplift['recommended_action']}")
 ```

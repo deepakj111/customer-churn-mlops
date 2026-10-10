@@ -47,7 +47,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=str,
-        default="reports/drift_report.json",
+        default="results/metrics/drift_results.json",
         help="Path to save the JSON drift report.",
     )
     args = parser.parse_args()
@@ -80,21 +80,130 @@ def main() -> None:
 
     current_engineered = engineer_features(current_clean)
 
+    # Compute model predictions on current data if champion pipeline exists
+    current_proba = None
+    champion_path = Path("models/champion_pipeline.joblib")
+    if champion_path.exists():
+        try:
+            import joblib
+
+            pipeline = joblib.load(champion_path)
+            current_proba = pipeline.predict_proba(current_clean)[:, 1]
+            logger.info(
+                "Computed current prediction probabilities on %d samples",
+                len(current_proba),
+            )
+        except Exception as e:
+            logger.warning("Could not compute current model probabilities: %s", e)
+
     # Run drift detection
     detector = DriftDetector(reference_df)
     report = detector.generate_report(
         current_df=current_engineered,
         reference_proba=reference_proba,
-        current_proba=None,  # No model predictions on current data yet
+        current_proba=current_proba,
     )
 
-    # Save report
+    # Save machine-readable JSON metrics to results/metrics/
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report_dict = report.to_dict()
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report_dict, f, indent=2, default=str)
+
+    # Generate Markdown monitoring report in results/
+    md_report_path = Path("results/DRIFT_MONITORING_REPORT.md")
+    drift_status_badge = (
+        "🚨 **DRIFT DETECTED**"
+        if report.overall_drift_detected
+        else "✅ **NO DRIFT DETECTED (STABLE)**"
+    )
+    drifted_list = (
+        "\n".join([f"- `{feat}`" for feat in report.drifted_features])
+        if report.drifted_features
+        else "_None. All feature distributions align with baseline._"
+    )
+
+    # Top features by PSI table
+    psi_rows = []
+    if report.numerical_drift:
+        sorted_feats = sorted(
+            report.numerical_drift, key=lambda x: x.drift_score, reverse=True
+        )[:10]
+        for item in sorted_feats:
+            status = "🔴 Drifted" if item.is_drifted else "🟢 Stable"
+            psi_rows.append(
+                f"| `{item.feature_name}` | {item.drift_score:.4f} | {status} |"
+            )
+    psi_table = (
+        "\n".join(psi_rows)
+        if psi_rows
+        else "| _No individual metrics recorded_ | - | - |"
+    )
+
+    pred_drift_display = (
+        f"`{report.prediction_drift_score:.4f}`"
+        if report.prediction_drift_score is not None
+        else "`0.0000`"
+    )
+
+    md_content = f"""# Production Drift & Population Stability Monitoring Report
+
+**Generated:** {report.timestamp}
+**Evaluation Scope:** Continuous Distribution Drift Detection against Baseline Snapshot
+
+---
+
+## 1. Executive Summary
+
+| Monitoring Dimension | Value | Operational Status |
+|---|---|---|
+| **Overall Drift Status** | {report.overall_drift_detected} | {drift_status_badge} |
+| **Reference Snapshot Shape** | `{report.reference_shape}` | Baseline reference |
+| **Current Production Shape** | `{report.current_shape}` | Production stream |
+| **Drifted Features** | `{len(report.drifted_features)}` | Alert threshold $\\ge 3$ |
+| **Prediction Drift Score (Wasserstein)** | {pred_drift_display} | Threshold: 0.10 |
+
+---
+
+## 2. Drift Detection Methodology & Thresholds
+
+- **Numerical Features (Population Stability Index - PSI)**:
+  - $\\text{{PSI}} < 0.10$: Minimal shift, distribution stable.
+  - $0.10 \\le \\text{{PSI}} < 0.20$: Moderate shift, warning trigger.
+  - $\\text{{PSI}} \\ge 0.20$: Significant shift, auto-retrain trigger.
+- **Categorical Features**:
+  - Two-sample Chi-Square goodness-of-fit test (Significance level $\\alpha = 0.05$).
+- **Prediction Drift**:
+  - Wasserstein distance metric on calibrated model output probabilities.
+
+---
+
+## 3. Top Feature Stability Analysis
+
+| Feature Name | PSI Score | Status |
+|---|---|---|
+{psi_table}
+
+---
+
+## 4. Drifted Features List
+
+{drifted_list}
+
+---
+
+## 5. Automated Operational Recommendations
+
+1. **Retraining Action**: If overall drift is flagged, execute
+   `poetry run python main.py retrain` to initiate champion-challenger tournament.
+2. **Monitoring Dashboards**: Real-time feature PSI decile distribution is available
+   in the Streamlit monitoring tab (`make dashboard`).
+"""
+
+    with open(md_report_path, "w", encoding="utf-8") as f:
+        f.write(md_content)
 
     print(f"\n{'=' * 55}")
     print("  DRIFT MONITORING REPORT")
@@ -108,7 +217,8 @@ def main() -> None:
         for feat in report.drifted_features:
             print(f"    - {feat}")
     print(f"  Prediction drift    : {report.prediction_drift_score or 'N/A'}")
-    print(f"\n  Report saved to: {output_path.resolve()}")
+    print(f"\n  JSON Results saved to: {output_path.resolve()}")
+    print(f"  Markdown Report at:   {md_report_path.resolve()}")
     print(f"{'=' * 55}\n")
 
 

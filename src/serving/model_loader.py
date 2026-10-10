@@ -122,6 +122,48 @@ def _try_load_from_mlflow() -> bool:
         return False
 
 
+def _try_load_from_disk() -> bool:
+    """
+    Attempt to load champion model from local models/ directory.
+
+    Provides sub-millisecond cold starts in Docker containers or offline
+    environments without waiting for MLflow network requests.
+    """
+    global _pipeline, _threshold, _model_info
+    import json
+    from pathlib import Path
+
+    import joblib
+
+    model_path = Path("models/champion_pipeline.joblib")
+    meta_path = Path("models/model_metadata.json")
+
+    if not model_path.exists():
+        return False
+
+    try:
+        logger.info("Loading model from local artifact: %s", model_path)
+        _pipeline = joblib.load(model_path)
+
+        if meta_path.exists():
+            with open(meta_path, "r") as f:
+                _model_info = json.load(f)
+                _threshold = float(_model_info.get("optimal_threshold", 0.5))
+        else:
+            _threshold = 0.5
+            _model_info = {
+                "model_name": "customer-churn-lgbm",
+                "source": "local_disk",
+                "optimal_threshold": _threshold,
+            }
+
+        logger.info("Model loaded from local disk — threshold: %.2f", _threshold)
+        return True
+    except Exception as e:
+        logger.warning("Failed to load local model artifact: %s", e)
+        return False
+
+
 def _train_local_model() -> None:
     """
     Train a fresh model locally for development and demo mode.
@@ -182,9 +224,16 @@ def _train_local_model() -> None:
     # Calibrate probabilities on validation set (matches production pipeline)
     from sklearn.calibration import CalibratedClassifierCV
 
-    calibrated_pipeline = CalibratedClassifierCV(
-        estimator=pipeline, method="isotonic", cv="prefit"
-    )
+    try:
+        from sklearn.frozen import FrozenEstimator
+
+        calibrated_pipeline = CalibratedClassifierCV(
+            estimator=FrozenEstimator(pipeline), method="isotonic"
+        )
+    except ImportError:
+        calibrated_pipeline = CalibratedClassifierCV(
+            estimator=pipeline, method="isotonic", cv="prefit"
+        )
     calibrated_pipeline.fit(X_val, y_val)
 
     # Find optimal threshold on validation set using calibrated probabilities
@@ -227,16 +276,19 @@ def _ensure_loaded() -> None:
         if _pipeline is not None:
             return
 
-        # Fallback chain: MLflow → local training → error
+        # Fallback chain: MLflow → local disk artifact → local training → error
         if _try_load_from_mlflow():
+            return
+
+        if _try_load_from_disk():
             return
 
         try:
             _train_local_model()
         except Exception as e:
             raise RuntimeError(
-                f"Failed to load model from MLflow and local training: {e}. "
-                "Ensure either MLFLOW_TRACKING_URI is set and the model is "
+                "Failed to load model from MLflow, local disk, and local training: "
+                f"{e}. Ensure either MLFLOW_TRACKING_URI is set and the model is "
                 "registered, or the training data is available at "
                 "data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv."
             ) from e
@@ -311,3 +363,64 @@ def reload_model() -> None:
     # Trigger the full load chain again
     _ensure_loaded()
     logger.info("Model reloaded successfully.")
+
+
+# ---------------------------------------------------------------------------
+# Uplift Causal Model Management
+# ---------------------------------------------------------------------------
+
+_uplift_lock = threading.Lock()
+_uplift_model: Any | None = None
+_uplift_meta: dict[str, Any] = {}
+
+
+def get_uplift_model() -> Any | None:
+    """
+    Lazily load and cache the Causal Uplift Model.
+
+    Loads from models/uplift/uplift_model.joblib. Returns None if
+    the uplift model is not available or failed to train.
+    """
+    global _uplift_model, _uplift_meta
+    if _uplift_model is not None:
+        return _uplift_model
+
+    with _uplift_lock:
+        if _uplift_model is not None:
+            return _uplift_model
+
+        import json
+        from pathlib import Path
+
+        import joblib
+
+        model_path = Path("models/uplift/uplift_model.joblib")
+        meta_path = Path("models/uplift/uplift_meta.json")
+
+        if not model_path.exists():
+            try:
+                from scripts.train_uplift import run_uplift_experiment
+
+                logger.info("Uplift model not found on disk. Auto-training now...")
+                run_uplift_experiment()
+            except Exception as e:
+                logger.warning("Auto-training uplift model failed: %s", e)
+                return None
+
+        try:
+            _uplift_model = joblib.load(model_path)
+            if meta_path.exists():
+                with open(meta_path, "r") as f:
+                    _uplift_meta = json.load(f)
+            logger.info("Uplift model loaded successfully from %s", model_path)
+        except Exception as e:
+            logger.warning("Failed to load uplift model artifact: %s", e)
+            _uplift_model = None
+
+    return _uplift_model
+
+
+def get_uplift_info() -> dict[str, Any]:
+    """Return metadata about the currently loaded uplift model."""
+    get_uplift_model()
+    return _uplift_meta.copy()

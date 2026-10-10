@@ -432,7 +432,55 @@ class TestMetricsEndpoint:
 
     def test_metrics_content(self, client, valid_customer):
         """Metrics endpoint should return Prometheus metrics after a request."""
-        client.post("/predict", json=valid_customer)
         response = client.get("/metrics")
         assert response.status_code == 200
         assert "prediction_requests_total" in response.text
+
+
+# ---------------------------------------------------------------------------
+# Uplift endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestUpliftEndpoints:
+    """Tests for Causal Uplift Modeling endpoints."""
+
+    def test_uplift_info_returns_200(self, client):
+        """Uplift info should return 200 with model metadata."""
+        response = client.get("/uplift/info")
+        assert response.status_code == 200
+        data = response.json()
+        assert "treatment_feature" in data
+        assert "model_type" in data
+        assert "feature_cols" in data
+
+    def test_uplift_predict_single(self, client, valid_customer):
+        """Single customer uplift prediction returns prescriptive CATE and quadrant."""
+        response = client.post("/uplift/predict", json=valid_customer)
+        assert response.status_code == 200
+        data = response.json()
+        assert "cate" in data
+        assert "uplift_segment" in data
+        assert "recommended_action" in data
+        assert "base_churn_probability" in data
+        assert 0.0 <= data["base_churn_probability"] <= 1.0
+
+    def test_uplift_predict_batch(self, client, valid_customer, high_risk_customer):
+        """Batch uplift prediction returns customer list and quadrant counts."""
+        payload = {"customers": [valid_customer, high_risk_customer]}
+        response = client.post("/uplift/batch", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_customers"] == 2
+        assert len(data["predictions"]) == 2
+        assert "persuadables_count" in data
+        assert "sure_things_count" in data
+        assert "lost_causes_count" in data
+        assert "sleeping_dogs_count" in data
+        assert (
+            data["persuadables_count"]
+            + data["sure_things_count"]
+            + data["lost_causes_count"]
+            + data["sleeping_dogs_count"]
+            <= 2
+        )

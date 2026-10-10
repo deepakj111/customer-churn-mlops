@@ -14,12 +14,10 @@ repo_code.txt
 repo_code*
 repo_export.txt
 
-*.ipynb
-htmlcov/
-
-# Jupyter
+# Jupyter checkpoints
 .ipynb_checkpoints/
 *.ipynb_metadata
+htmlcov/
 
 # Data (managed by DVC, not Git)
 # Ignore actual data files but allow DVC tracking files
@@ -28,8 +26,10 @@ data/**/*.json
 data/**/*.parquet
 data/**/*.xlsx
 data/**/*.zip
+data/**/*.npy
 !data/**/.gitignore
 !data/**/*.dvc
+!data/README.md
 *.csv
 *.parquet
 
@@ -39,8 +39,9 @@ data/**/*.zip
 *.model
 mlruns/
 
-# Reports (auto-generated)
-reports/
+# Results directory is tracked for documentation and evaluation reporting
+!results/**
+results/**/*.pkl
 
 # Environment
 .env
@@ -66,10 +67,6 @@ Thumbs.db
 
 # CatBoost
 catboost_info/
-
-# Generated notebook reports
-reports/*.png
-reports/*.html
 
 # Deep Learning / PyTorch Tabular
 lightning_logs/

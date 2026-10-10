@@ -73,6 +73,9 @@ jobs:
       - name: Lint (flake8)
         run: poetry run flake8 src/ tests/ scripts/
 
+      - name: Type check (mypy)
+        run: poetry run mypy src/
+
   # --------------------------------------------------------------------------
   # Job 2: Test — full pytest suite with coverage
   # --------------------------------------------------------------------------

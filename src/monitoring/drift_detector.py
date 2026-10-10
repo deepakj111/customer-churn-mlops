@@ -47,9 +47,8 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 # Number of quantile-based bins for PSI calculation.
-# 10 bins is a standard industry choice — enough granularity to detect
-# distributional shifts without being so fine-grained that noise triggers
-# false alarms.
+# 10 bins is a standard choice — provides sufficient granularity to detect
+# distributional shifts without noise triggering false alarms.
 _PSI_BINS = 10
 
 # Small constant added to bin proportions to prevent division by zero

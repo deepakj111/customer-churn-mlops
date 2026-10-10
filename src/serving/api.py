@@ -47,16 +47,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
-from src.serving.model_loader import get_model, get_model_info, get_threshold
+from src.serving.model_loader import (
+    get_model,
+    get_model_info,
+    get_threshold,
+    get_uplift_info,
+    get_uplift_model,
+)
 from src.serving.schemas import (
     BatchPredictionRequest,
     BatchPredictionResponse,
+    BatchUpliftResponse,
     CustomerFeatures,
     ErrorDetail,
     HealthResponse,
     ModelInfoResponse,
     PredictionResponse,
     RiskTier,
+    UpliftPredictionResponse,
+    UpliftSegment,
 )
 from src.utils.logging import get_logger
 
@@ -80,6 +89,9 @@ CHURN_PROBABILITY_HISTOGRAM = Histogram(
     "churn_prediction_probability",
     "Distribution of churn probabilities predicted",
     buckets=(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
+)
+UPLIFT_REQUEST_COUNT = Counter(
+    "uplift_requests_total", "Total causal uplift prediction requests", ["endpoint"]
 )
 
 
@@ -122,7 +134,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title="Customer Churn Prediction API",
     description=(
-        "Production-grade REST API for predicting customer churn "
+        "REST API for predicting customer churn "
         "using a LightGBM model with 28 engineered features. "
         "Part of the Customer Churn MLOps Pipeline."
     ),
@@ -774,4 +786,208 @@ async def predict_customer(
         raise HTTPException(
             status_code=500,
             detail=f"Feast prediction failed: {str(e)}",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Causal Uplift (Prescriptive Retention) Endpoints
+# ---------------------------------------------------------------------------
+
+
+def _predict_uplift_df(
+    df: pd.DataFrame, request_id: str | None = None
+) -> list[UpliftPredictionResponse]:
+    """
+    Run Causal Uplift inference on a DataFrame of customer records.
+
+    Calculates the Conditional Average Treatment Effect (CATE) using an EconML
+    T-Learner and determines the prescriptive retention quadrant.
+    """
+    from src.features.feature_store import engineer_features
+
+    uplift_model = get_uplift_model()
+    if uplift_model is None:
+        raise RuntimeError(
+            "Causal uplift model is unavailable or failed to initialize."
+        )
+
+    info = get_uplift_info()
+    feature_cols = info.get("feature_cols", [])
+
+    df_in = df.copy()
+    if "TotalCharges" in df_in.columns:
+        df_in["TotalCharges"] = pd.to_numeric(
+            df_in["TotalCharges"].replace(" ", ""), errors="coerce"
+        ).fillna(0.0)
+
+    df_feat = engineer_features(df_in)
+    excluded_cols = ["Churn", "TechSupport", "customerID"]
+    X_cols = [c for c in df_feat.columns if c not in excluded_cols]
+    X = df_feat[X_cols].copy()
+    X = pd.get_dummies(X, drop_first=True, dtype=float)
+
+    if feature_cols:
+        X_aligned = X.reindex(columns=feature_cols, fill_value=0.0)
+    else:
+        X_aligned = X
+
+    cate_arr = uplift_model.predict_uplift(X_aligned)
+    base_prob_arr = uplift_model.model.models[0].predict_proba(X_aligned.values)[:, 1]
+
+    results: list[UpliftPredictionResponse] = []
+    for i in range(len(df)):
+        cate_val = round(float(cate_arr[i]), 4)
+        base_prob = round(float(base_prob_arr[i]), 4)
+
+        if base_prob >= 0.5 and cate_val <= -0.05:
+            segment = UpliftSegment.PERSUADABLE
+            action = "Intervene: Target customer. Proactively offer retention bundle."
+        elif base_prob < 0.5 and cate_val <= 0.0:
+            segment = UpliftSegment.SURE_THING
+            action = (
+                "No intervention: Low baseline churn risk. Conserve retention budget."
+            )
+        elif base_prob >= 0.5 and cate_val > -0.05:
+            segment = UpliftSegment.LOST_CAUSE
+            action = (
+                "Do not intervene: Churn probability is not mitigated by intervention."
+            )
+        elif base_prob < 0.5 and cate_val > 0.0:
+            segment = UpliftSegment.SLEEPING_DOG
+            action = "DO NOT CONTACT: Outreach triggers negative reaction and churn."
+        else:
+            segment = UpliftSegment.UNKNOWN
+            action = "Evaluate customer manually."
+
+        results.append(
+            UpliftPredictionResponse(
+                cate=cate_val,
+                uplift_segment=segment,
+                recommended_action=action,
+                base_churn_probability=base_prob,
+                request_id=request_id,
+            )
+        )
+
+    return results
+
+
+@app.get(
+    "/uplift/info",
+    tags=["Causal AI"],
+    summary="Causal uplift model metadata",
+    description=(
+        "Returns metadata about the CATE (Conditional Average Treatment Effect) "
+        "T-Learner model."
+    ),
+)
+async def uplift_info() -> dict[str, Any]:
+    """Return metadata for the causal uplift model."""
+    info = get_uplift_info()
+    if not info:
+        raise HTTPException(
+            status_code=503,
+            detail="Uplift model metadata is unavailable.",
+        )
+    return info
+
+
+@app.post(
+    "/uplift/predict",
+    response_model=UpliftPredictionResponse,
+    tags=["Causal AI"],
+    summary="Single customer causal uplift prediction",
+    description=(
+        "Estimate the Conditional Average Treatment Effect (CATE) of offering "
+        "retention support to a customer."
+    ),
+)
+async def predict_uplift(
+    customer: CustomerFeatures,
+    request: Request,
+) -> UpliftPredictionResponse:
+    """Predict causal treatment effect and quadrant for a single customer."""
+    request_id = request.state.request_id
+    UPLIFT_REQUEST_COUNT.labels(endpoint="uplift_predict").inc()
+
+    try:
+        df = _customer_to_dataframe(customer)
+        results = _predict_uplift_df(df, request_id)
+        return results[0]
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(
+            "Uplift prediction failed [request_id=%s]: %s",
+            request_id,
+            e,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Uplift prediction failed: {str(e)}",
+        )
+
+
+@app.post(
+    "/uplift/batch",
+    response_model=BatchUpliftResponse,
+    tags=["Causal AI"],
+    summary="Batch causal uplift prediction",
+    description=(
+        "Run CATE uplift modeling across 1-100 customers with campaign "
+        "quadrant distribution."
+    ),
+)
+async def predict_uplift_batch(
+    batch: BatchPredictionRequest,
+    request: Request,
+) -> BatchUpliftResponse:
+    """Predict causal treatment effects for a batch of customers."""
+    request_id = request.state.request_id
+    UPLIFT_REQUEST_COUNT.labels(endpoint="uplift_batch").inc()
+
+    try:
+        all_data = []
+        for customer in batch.customers:
+            row = customer.model_dump(mode="json")
+            row["SeniorCitizen"] = str(row["SeniorCitizen"])
+            all_data.append(row)
+        df = pd.DataFrame(all_data)
+
+        predictions = _predict_uplift_df(df, request_id)
+        persuadables = sum(
+            1 for p in predictions if p.uplift_segment == UpliftSegment.PERSUADABLE
+        )
+        sure_things = sum(
+            1 for p in predictions if p.uplift_segment == UpliftSegment.SURE_THING
+        )
+        lost_causes = sum(
+            1 for p in predictions if p.uplift_segment == UpliftSegment.LOST_CAUSE
+        )
+        sleeping_dogs = sum(
+            1 for p in predictions if p.uplift_segment == UpliftSegment.SLEEPING_DOG
+        )
+
+        return BatchUpliftResponse(
+            predictions=predictions,
+            total_customers=len(predictions),
+            persuadables_count=persuadables,
+            sure_things_count=sure_things,
+            lost_causes_count=lost_causes,
+            sleeping_dogs_count=sleeping_dogs,
+            request_id=request_id,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(
+            "Batch uplift prediction failed [request_id=%s]: %s",
+            request_id,
+            e,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch uplift prediction failed: {str(e)}",
         )

@@ -1,285 +1,152 @@
-# Monitoring & Drift Detection Guide
+# Continuous Monitoring & Drift Remediation Guide
 
-This document explains how the data drift monitoring system works, how to use it, and how to interpret the results.
-
----
-
-## Table of Contents
-
-- [Why Monitor for Drift?](#why-monitor-for-drift)
-- [Types of Drift Detected](#types-of-drift-detected)
-- [Quick Start](#quick-start)
-- [Understanding the Results](#understanding-the-results)
-- [Configuration](#configuration)
-- [Integration with Retraining](#integration-with-retraining)
+Comprehensive guide to production monitoring, drift detection, and automated champion-challenger retraining for the **Customer Churn MLOps Platform**.
 
 ---
 
-## Why Monitor for Drift?
+## 1. Monitoring Philosophy: The Retraining Flywheel
 
-A machine learning model is a **snapshot of patterns observed in historical data**. When the production data distribution shifts away from that snapshot, the model's predictions become unreliable — even if the model code hasn't changed.
+In customer churn systems, **data drift is a leading indicator of business loss**. Once a company notices actual customer cancellations increasing in financial statements, model degradation has already been costing recurring revenue for 30–60 days.
 
-Common causes of data drift in churn prediction:
-- **New pricing plans** change `MonthlyCharges` distribution
-- **Market expansion** shifts `Contract` type ratios
-- **Seasonal effects** alter customer behavior patterns
-- **Upstream system changes** modify how features like `TotalCharges` are calculated
+This platform implements a closed-loop monitoring flywheel:
 
-> **Key Insight:** Data drift is a *leading indicator* of model degradation. By the time model performance metrics drop, you've already been making bad predictions for weeks. Drift detection gives you an early warning.
+```mermaid
+graph TD
+    A[Production Ingestion Stream] --> B[Feast Feature Store]
+    B --> C[FastAPI Serving Layer]
+    C -->|Prometheus Telemetry| D[Grafana Live Traffic Dashboard]
+    C -->|Log Inference Predictions| E[Production Prediction Log]
+
+    E --> F[Automated Drift Monitoring Job: python main.py monitor]
+    F --> G{Evaluate Drift Triggers}
+    G -->|PSI < 0.20 & Wass < 0.10| H[Log No Drift Detected & Sleep]
+    G -->|PSI >= 0.20 or Chi-sq p < 0.01| I[Trigger Challenger Retraining: python main.py retrain]
+
+    I --> J[Fit New Challenger Pipeline on Recent Data]
+    J --> K[Isotonic Calibration on Validation Set]
+    J --> L[Run 5-Fold Stratified Cross-Validation Benchmark]
+    L --> M[Nadeau-Bengio Corrected t-Test]
+    M --> N{Challenger Statistically Superior p < 0.05?}
+    N -->|Yes| O[Auto-Promote Challenger in MLflow Model Registry]
+    N -->|No| P[Retain Champion & Alert Data Science Team]
+```
 
 ---
 
-## Types of Drift Detected
+## 2. Drift Detection Methodologies
 
-### 1. Real-Time API Metrics (Prometheus & Grafana)
+The monitoring engine in [`src/monitoring/drift_detector.py`](file:///home/deepak/customer-churn-mlops/src/monitoring/drift_detector.py) evaluates three statistical dimensions:
 
-**What it measures:** Continuous tracking of API requests, prediction latency overhead, error rates, and the raw distribution of churn probabilities streaming into the endpoint.
+### A. Numerical Feature Drift: Population Stability Index (PSI)
+Measures the divergence between the baseline training distribution ($P_{\text{ref}}$) and the current production stream ($P_{\text{curr}}$) across quantile-binned deciles:
 
-**Method:** Time-series metric `Counters` and `Histograms` scraped concurrently by **Prometheus** at the `/metrics` endpoint.
+$$\text{PSI} = \sum_{b=1}^{B} \left( P_{\text{curr}}(b) - P_{\text{ref}}(b) \right) \cdot \ln \left( \frac{P_{\text{curr}}(b)}{P_{\text{ref}}(b)} \right)$$
 
-**Interpretation:**
-Visualized dynamically inside **Grafana** using the pre-provisioned "Churn Prediction API" dashboard. This isn't "drift" per se, but instead provides a second-by-second operational view to ensure the model service isn't crashing and predictions are being served in a timely manner.
+| PSI Score | Statistical Interpretation | Automated Action |
+|---|---|---|
+| $\text{PSI} < 0.10$ | Stable; no significant shift | Routine monitoring |
+| $0.10 \le \text{PSI} < 0.20$ | Moderate shift in feature distributions | Warning flag logged; monitor closely |
+| $\text{PSI} \ge 0.20$ | **Severe population drift** | **Automated retraining triggered** |
 
-### 2. Numerical Feature Drift — PSI (Population Stability Index)
+### B. Categorical Feature Drift: Chi-Squared Goodness-of-Fit Test
+Tests whether observed frequency distributions of categorical attributes (e.g., `Contract`, `PaymentMethod`, `InternetService`) diverge from the reference expected frequencies:
 
-**What it measures:** Whether the distribution shape of a numerical feature has changed.
+$$\chi^2 = \sum_{k=1}^{K} \frac{(O_k - E_k)^2}{E_k}$$
 
-**Method:** Quantile-based binning of both reference and current data, then computing:
+- **Null Hypothesis ($H_0$)**: Production distribution matches training reference.
+- **Trigger**: Categorical drift flagged when $p \le 0.01$ with large sample sizes.
 
-```
-PSI = Σ (P_current - P_reference) × ln(P_current / P_reference)
-```
-
-**Interpretation:**
-
-| PSI Value | Meaning | Action |
-|-----------|---------|--------|
-| < 0.10 | No significant shift | No action needed |
-| 0.10 – 0.25 | Moderate shift | Monitor closely |
-| > 0.25 | Significant drift | Investigate + retrain |
-
-**Example:** If `MonthlyCharges` has PSI = 0.32, it means the distribution of monthly charges in production data is significantly different from training data — perhaps due to a pricing change.
-
-### 3. Categorical Feature Drift — Chi-Squared Test
-
-**What it measures:** Whether the category proportions of a categorical feature have changed.
-
-**Method:** Chi-squared goodness-of-fit test comparing observed (current) frequencies against expected (reference) frequencies.
-
-**Interpretation:**
-
-| p-value | Meaning | Action |
-|---------|---------|--------|
-| > 0.05 | No significant change | No action needed |
-| ≤ 0.05 | Statistically significant change | Investigate + potential retrain |
-
-**Example:** If `Contract` type distribution changes from (55% month-to-month, 25% one-year, 20% two-year) to (30% month-to-month, 40% one-year, 30% two-year), the chi-squared test will flag this as drift.
-
-### 4. Prediction Drift — Mean Probability Shift
-
-**What it measures:** Whether the model's average predicted churn probability has changed.
-
-**Method:** Relative shift between reference and current mean predictions:
-
-```
-drift = |mean(current_proba) - mean(reference_proba)| / mean(reference_proba)
-```
-
-**Interpretation:**
-
-| Relative Shift | Meaning | Action |
-|---------------|---------|--------|
-| < 0.10 (10%) | Normal variation | No action needed |
-| 0.10 – 0.15 | Moderate shift | Monitor closely |
-| > 0.15 (15%) | Significant output drift | Investigate root cause |
+### C. Prediction Probability Drift: Wasserstein Distance
+Monitors shifts in the continuous distribution of model output probabilities ($p \in [0, 1]$):
+$$W_1(u, v) = \int_{-\infty}^{+\infty} |U(x) - V(x)| dx$$
+- Flags when the output distribution has shifted by $W \ge 0.10$, catching systemic macro-economic behavioral changes before ground-truth churn labels arrive.
 
 ---
 
-## Quick Start
+## 3. Operational Usage & Commands
 
-### Step 1: Save Reference Data
-
-After training your model, save the training data as the drift reference:
-
+### Step 1: Snapshot Baseline Training Reference
+After model training, save the baseline distribution snapshot:
 ```bash
 poetry run python scripts/save_reference_data.py
+# Generates:
+# - data/reference/reference_features.parquet
+# - data/reference/reference_probabilities.npy
+# - data/reference/reference_metadata.json
 ```
 
-This creates three files in `data/reference/`:
-- `reference_features.parquet` — Feature distributions
-- `reference_probabilities.npy` — Model predictions (if provided)
-- `reference_metadata.json` — Metadata (timestamp, model version, feature names)
+### Step 2: Generate Drift Reports
+Run the unified CLI monitor command:
+```bash
+# Compare production stream against saved reference snapshot
+poetry run python main.py monitor
 
-### Step 2: Generate a Drift Report
+# Or compare a specific production batch file:
+poetry run python main.py monitor --current data/raw/production_stream_june.csv --output results/metrics/drift_results.json
+```
 
-Compare current data against the reference:
+### Step 3: Inspect the Generated Drift Metrics (`results/metrics/drift_results.json`) & Report (`results/DRIFT_MONITORING_REPORT.md`)
+```json
+{
+  "timestamp": "2026-10-10T11:00:00Z",
+  "overall_drift_detected": true,
+  "drifted_features": ["MonthlyCharges", "Contract"],
+  "numerical_drift": [
+    {
+      "feature_name": "MonthlyCharges",
+      "drift_score": 0.2412,
+      "is_drifted": true,
+      "method": "psi",
+      "threshold": 0.20
+    }
+  ],
+  "prediction_drift_score": 0.1142,
+  "prediction_is_drifted": true
+}
+```
+
+---
+
+## 4. Automated Retraining & Hypothesis-Tested Promotion
+
+When drift is detected, running the retraining pipeline executes the **champion-challenger tournament**:
 
 ```bash
-# Self-comparison (baseline — should show no drift)
-poetry run python scripts/generate_drift_report.py
-
-# Compare against new production data
-poetry run python scripts/generate_drift_report.py --current data/raw/new_data.csv
-
-# Save report to a specific location
-poetry run python scripts/generate_drift_report.py --output reports/drift_report.json
+# Execute automated drift-triggered retraining flow
+poetry run python main.py retrain
 ```
 
-### Step 3: Interpret the Report
+### Why Naive CV Score Comparison is Dangerous
+In traditional setups, if Challenger mean ROC-AUC is `0.852` and Champion is `0.850`, teams automatically promote the challenger. **This is fundamentally invalid.** Because cross-validation folds share 80% of training data across folds, the variance of the difference is underestimated, leading to high false-alarm promotion rates (promoting noise).
 
-```
-=======================================================
-  DRIFT MONITORING REPORT
-=======================================================
-  Reference shape     : (7043, 47)
-  Current shape       : (1500, 47)
-  Overall drift       : YES ⚠️
-  Drifted features    : 2
-    - MonthlyCharges
-    - Contract
-  Prediction drift    : 0.1823
+### The Nadeau-Bengio (2003) Correction
+The retraining pipeline applies the corrected repeated cross-validation test:
+$$\hat{\sigma}^2_{\text{corrected}} = \left( \frac{1}{K} + \frac{n_{\text{test}}}{n_{\text{train}}} \right) \cdot S^2$$
+$$t_{\text{corrected}} = \frac{\bar{d}}{\sqrt{\hat{\sigma}^2_{\text{corrected}}}} \sim t_{K-1}$$
 
-  Report saved to: /path/to/reports/drift_report.json
-=======================================================
-```
+The challenger is promoted in MLflow Model Registry **only if**:
+1. It passes all Pandera data validation and fairness audits.
+2. The corrected hypothesis test proves the challenger is superior at $p < 0.05$.
 
-### Programmatic Usage
-
-```python
-from src.monitoring.drift_detector import DriftDetector
-from src.monitoring.reference_builder import load_reference
-
-# Load reference data
-reference_df, reference_proba = load_reference()
-
-# Initialize detector
-detector = DriftDetector(reference_df)
-
-# Generate report
-report = detector.generate_report(
-    current_df=production_data_df,
-    reference_proba=reference_proba,
-    current_proba=model.predict_proba(production_data_df)[:, 1],
-)
-
-# Check results
-if report.overall_drift_detected:
-    print(f"ALERT: {len(report.drifted_features)} features drifted!")
-    print(f"Drifted: {report.drifted_features}")
-else:
-    print("No drift detected ✅")
-
-# Export for logging
-report_dict = report.to_dict()  # JSON-serializable dict
+### Forcing a Retraining Run
+For manual maintenance or quarterly scheduled refresh:
+```bash
+poetry run python main.py retrain --force
 ```
 
 ---
 
-## Configuration
+## 5. Real-Time Observability (Prometheus & Grafana)
 
-All thresholds are configurable in `configs/monitoring_config.yaml`:
+The serving engine exports live metrics at `GET /metrics`:
 
-```yaml
-# Numerical feature drift threshold (PSI)
-psi_threshold: 0.25
+| Metric Name | Type | Description |
+|---|---|---|
+| `prediction_requests_total` | Counter | Total volume of requests labeled by endpoint (`/predict`, `/uplift/predict`) |
+| `prediction_errors_total` | Counter | Volume of 4xx/5xx failures |
+| `prediction_latency_seconds` | Histogram | Request latency distribution percentiles (p50, p95, p99) |
+| `churn_prediction_probability` | Histogram | Distribution of predicted churn probabilities across 10 deciles |
+| `uplift_requests_total` | Counter | Total volume of causal intervention scoring requests |
 
-# Categorical feature drift significance level
-chi_squared_alpha: 0.05
-
-# Prediction drift — relative mean shift threshold
-prediction_drift_threshold: 0.15
-
-# Performance drift — F1 score drop vs. baseline
-performance_drop_threshold: 0.05
-
-# Reference window — days of training data to use as baseline
-reference_window_days: 90
-
-# Monitoring window — days of production data to compare
-monitoring_window_days: 7
-
-# Label delay — days before ground truth labels are available
-label_delay_days: 45
-```
-
-### Tuning Guidelines
-
-- **More sensitive detection:** Lower `psi_threshold` (e.g., 0.15) and raise `chi_squared_alpha` (e.g., 0.10)
-- **Fewer false alarms:** Raise `psi_threshold` (e.g., 0.30) and lower `chi_squared_alpha` (e.g., 0.01)
-- **Churn-specific:** Customer churn labels typically take 30–60 days to materialize. The `label_delay_days` parameter accounts for this when scheduling performance evaluation.
-
----
-
-## Understanding the Results
-
-### DriftReport Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `timestamp` | string | ISO timestamp of report generation |
-| `reference_shape` | tuple | (rows, cols) of reference data |
-| `current_shape` | tuple | (rows, cols) of current data |
-| `numerical_drift` | list | PSI results per numerical feature |
-| `categorical_drift` | list | Chi-squared results per categorical feature |
-| `prediction_drift_score` | float | Relative mean probability shift |
-| `prediction_is_drifted` | bool | Whether prediction drift exceeds threshold |
-| `overall_drift_detected` | bool | True if ANY drift was detected |
-| `drifted_features` | list | Names of features that exceeded thresholds |
-| `summary` | string | Human-readable summary message |
-
-### Per-Feature Result Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `feature_name` | string | Column name |
-| `drift_score` | float | PSI value or chi-squared p-value |
-| `is_drifted` | bool | Whether threshold was exceeded |
-| `method` | string | `"psi"` or `"chi_squared"` |
-| `threshold` | float | Threshold used for this feature |
-| `details` | dict | Additional stats (mean, std, chi2 statistic) |
-
----
-
-## Integration with Retraining
-
-The drift monitoring system is designed to be the trigger for automated retraining. Here's the recommended workflow:
-
-```
-Daily Production Data
-        │
-        ▼
-  Drift Detection Job (scheduled)
-        │
-        ├── No drift detected → Log metrics, continue
-        │
-        └── Drift detected ────▶ Alert Team
-                                      │
-                                      ▼
-                               Investigate Root Cause
-                                      │
-                   ┌──────────────────┼──────────────┐
-                   │                  │              │
-              Data Issue       Distribution    Model Decay
-              (fix upstream)    Shift (real)   (retrain)
-                                      │              │
-                                      ▼              ▼
-                                 Retrain Model ◀─────┘
-                                      │
-                                      ▼
-                               Evaluate on Test Set
-                                      │
-                                      ▼
-                               Update Reference Data
-                                      │
-                                      ▼
-                               Deploy New Model
-```
-
-### Recommended Schedule
-
-| Check | Frequency | Automation |
-|-------|-----------|-----------|
-| Data drift (PSI + chi-squared) | Daily | Cron job / Prefect flow |
-| Prediction drift | Daily | Cron job / Prefect flow |
-| Performance evaluation | After label delay (45 days) | Scheduled pipeline |
-| Reference data update | After each retraining | Post-training script |
+Access the pre-provisioned Grafana dashboards when running Docker Compose:
+- **URL**: [`http://localhost:3000`](http://localhost:3000) (default credentials: `admin` / `admin`).

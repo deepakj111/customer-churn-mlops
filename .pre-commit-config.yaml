@@ -8,7 +8,8 @@ repos:
         exclude: ^notebooks/
       - id: check-yaml
       - id: check-added-large-files
-        args: ['--maxkb=1000']   # Block files > 1MB from being committed
+        args: ['--maxkb=5000']
+        exclude: ^notebooks/
       - id: check-merge-conflict
 
   - repo: https://github.com/psf/black
@@ -30,4 +31,4 @@ repos:
     hooks:
       - id: flake8
         exclude: ^notebooks/|^dashboards/streamlit_app\.py$
-        args: ['--max-line-length=88']   # Match black's default
+        args: ['--max-line-length=88', '--extend-ignore=E203,W503']

@@ -60,8 +60,8 @@ services:
       # The dashboard calls the API via Docker internal networking.
       - API_URL=http://api:8000
     volumes:
-      # Mount reports directory for dynamic report loading.
-      - ../reports:/app/reports:ro
+      # Mount results directory for dynamic report and metrics loading.
+      - ../results:/app/results:ro
     depends_on:
       api:
         condition: service_started
