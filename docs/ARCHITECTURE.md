@@ -28,10 +28,13 @@ The system is designed according to core MLOps engineering principles:
                                           │
 ┌─────────────────────────────────────────▼─────────────────────────────────────────┐
 │                                 SERVING LAYER                                     │
-│  api.py (REST) │ schemas.py (Pydantic v2) │ model_loader.py (Thread-safe Cache)   │
-│  ├── /predict & /predict/batch (LightGBM + SHAP + MAPIE Conformal Sets)           │
-│  ├── /predict/customer/{id} (Feast Online Store SQLite/Redis Hydration)           │
-│  └── /uplift/predict & /uplift/batch (EconML T-Learner CATE Quadrant Engine)       │
+│  api.py (REST /api/v1) │ schemas.py (Pydantic v2) │ model_loader.py (Thread Cache)│
+│  ├── /api/v1/predict & /predict/batch (LightGBM + SHAP + MAPIE Conformal Sets)    │
+│  ├── /api/v1/predict/batch/async (Non-blocking async worker jobs + polling)       │
+│  ├── /api/v1/predict/customer/{id} (Feast Online Store SQLite/Redis Hydration)    │
+│  ├── /api/v1/uplift/predict & batch (EconML T-Learner CATE Quadrant Engine)       │
+│  ├── OWASP Security Headers (nosniff, DENY, HSTS, CSP) & Sliding-Window Rate Limit│
+│  └── Decoupled Probes: /health (Liveness) & /readiness (Model Artifact Readiness) │
 └─────────────────────────────────────────┬─────────────────────────────────────────┘
                                           │
 ┌─────────────────────────────────────────▼─────────────────────────────────────────┐
@@ -53,11 +56,12 @@ The system is designed according to core MLOps engineering principles:
 │                   fairness_audit.py, statistical_comparison.py                    │
 │  src/monitoring/: drift_detector.py, reference_builder.py                         │
 │  src/utils/     : config_loader.py (Singleton YAML Dataclasses), logging.py       │
+│  src/serving/   : api.py (API v1, RateLimiting), schemas.py, model_loader.py      │
 └─────────────────────────────────────────┬─────────────────────────────────────────┘
                                           │
 ┌─────────────────────────────────────────▼─────────────────────────────────────────┐
 │                       INFRASTRUCTURE & EXTERNAL SERVICES                          │
-│  MLflow (5000) │ Prometheus (9090) │ DVC Storage │ Docker Compose │ GitHub CI/CD  │
+│  MLflow (5000) │ Prometheus (9090) │ Kubernetes (Kustomize) │ Docker │ GitHub CI  │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -185,6 +189,10 @@ $$\tau(X) = \mathbb{E}[Y \mid X, T=1] - \mathbb{E}[Y \mid X, T=0]$$
 2. Local disk artifact (`models/champion_pipeline.joblib`) — loads in $< 1$ millisecond.
 3. In-memory local training fallback (~12 seconds).
 **Why:** Guarantees zero downtime during container cold-starts, network partitions, or offline CI/CD test runs.
+
+### 7. Cloud-Native Reliability, OWASP Hardening & Decoupled Probes
+**Decision:** Implement strict OWASP security headers, in-memory sliding-window rate limiting, and decoupled `/health` (liveness) vs. `/readiness` (model readiness) probe semantics paired with Kustomize manifests.
+**Why:** Production serving must withstand client abuse and rolling deployments. Decoupling probes ensures Kubernetes does not route traffic until model weights are resident in memory, preventing dropped requests during horizontal autoscaling events.
 
 ---
 

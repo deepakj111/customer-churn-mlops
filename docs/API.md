@@ -10,24 +10,44 @@ The production serving engine is built with [FastAPI](https://fastapi.tiangolo.c
 1. **Predictive Churn Engine**: Scores 30-to-90 day forward churn probabilities using an isotonic-calibrated LightGBM pipeline with SHAP local explainability and MAPIE conformal prediction uncertainty sets.
 2. **Prescriptive Causal Uplift Engine**: Estimates the Conditional Average Treatment Effect (CATE) using an EconML T-Learner to recommend cost-optimal retention interventions across customer behavioral quadrants.
 3. **Real-Time Feature Hydration**: Connects to the **Feast Feature Store** to score active subscribers directly by `customer_id`.
+4. **Asynchronous Batch Workloads**: High-throughput non-blocking batch scoring via background task workers with job status polling.
 
-**Base URLs:**
-- Local Development: `http://localhost:8000`
-- Docker Compose: `http://api:8000` (internal network) / `http://localhost:8000` (host port)
-- Interactive Swagger UI: [`http://localhost:8000/docs`](http://localhost:8000/docs)
-- Interactive ReDoc: [`http://localhost:8000/redoc`](http://localhost:8000/redoc)
+**API Versioning Strategy:**
+- **Canonical API v1 Routes**: Prefixed with `/api/v1/*` (e.g., `/api/v1/predict`, `/api/v1/predict/batch`, `/api/v1/model/info`).
+- **Backward-Compatible Root Aliases**: Top-level routes (e.g., `/predict`) remain active for seamless legacy integration.
+- **Base URLs**:
+  - Local Development: `http://localhost:8000`
+  - Docker Compose: `http://api:8000` (internal network) / `http://localhost:8000` (host port)
+  - Interactive Swagger UI: [`http://localhost:8000/docs`](http://localhost:8000/docs)
+  - Interactive ReDoc: [`http://localhost:8000/redoc`](http://localhost:8000/redoc)
 
 ---
 
-## 2. Authentication & Headers
+## 2. Authentication, Security & Headers
 
 In local and testing modes, endpoints are open. In production, authenticate requests using an `Authorization: Bearer <JWT>` header via reverse-proxy or API Gateway.
 
-### Request Tracing Header
+### Request Tracing & Observability
 Every API request receives a unique UUID4 trace identifier:
 - Returned in HTTP response headers: `X-Request-ID: 7a9e1d84-4b53-48b2-b1e8-782d49e1501b`
 - Included in all response JSON payloads: `"request_id": "7a9e1d84-4b53-48b2-b1e8-782d49e1501b"`
 - Automatically injected into server logs for distributed cross-system debugging.
+
+### OWASP API Security Top 10 Headers
+All responses automatically include defense-in-depth security headers:
+- `X-Content-Type-Options: nosniff` (MIME sniffing prevention)
+- `X-Frame-Options: DENY` (Clickjacking mitigation)
+- `Cache-Control: no-store` (Prevents downstream caching of sensitive predictions)
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains` (Enforces HTTPS)
+
+### Traffic Management & Rate Limiting
+A thread-safe in-memory sliding-window rate limiter protects endpoints against resource exhaustion and denial-of-service:
+- **Default Limit**: `600` requests per minute per client IP (configurable via `RATE_LIMIT_PER_MINUTE`).
+- **Headers Returned**:
+  - `X-RateLimit-Limit: 600`
+  - `X-RateLimit-Remaining: 598`
+- **Exceeded Threshold**: Returns HTTP `429 Too Many Requests` with a `Retry-After: 60` header and structured error detail.
+- **Probe Bypass**: System probes (`/health`, `/readiness`, `/metrics`) and OpenAPI documentation are exempted from rate limiting.
 
 ---
 
@@ -35,15 +55,19 @@ Every API request receives a unique UUID4 trace identifier:
 
 | Method | Path | Category | Description |
 |---|---|---|---|
-| `POST` | `/predict` | Predictive ML | Single customer prediction with SHAP & Conformal bounds |
-| `POST` | `/predict/batch` | Predictive ML | Vectorized batch prediction (1–100 customers) |
-| `GET`  | `/predict/customer/{customer_id}` | Feature Store | Real-time prediction fetching raw features from Feast online store |
-| `POST` | `/uplift/predict` | Causal AI | Single customer CATE uplift & prescriptive intervention recommendation |
-| `POST` | `/uplift/batch` | Causal AI | Batch prescriptive campaign assignment with quadrant summary |
-| `GET`  | `/uplift/info` | Causal AI | Causal model metadata (treatment feature, model type, feature count) |
-| `GET`  | `/model/info` | Diagnostics | Production model metadata (algorithm, version, optimal threshold) |
-| `GET`  | `/health` | System | Health check for Kubernetes liveness/readiness probes |
+| `POST` | `/api/v1/predict` | Predictive ML | Single customer prediction with SHAP & Conformal bounds |
+| `POST` | `/api/v1/predict/batch` | Predictive ML | Synchronous vectorized batch prediction (1–100 customers) |
+| `POST` | `/api/v1/predict/batch/async` | Asynchronous ML | Non-blocking async batch job submission (returns HTTP 202) |
+| `GET`  | `/api/v1/predict/batch/jobs/{id}` | Asynchronous ML | Poll status and retrieve completed async batch predictions |
+| `GET`  | `/api/v1/predict/customer/{id}` | Feature Store | Real-time prediction fetching raw features from Feast online store |
+| `POST` | `/api/v1/uplift/predict` | Causal AI | Single customer CATE uplift & prescriptive intervention recommendation |
+| `POST` | `/api/v1/uplift/batch` | Causal AI | Batch prescriptive campaign assignment with quadrant summary |
+| `GET`  | `/api/v1/uplift/info` | Causal AI | Causal model metadata (treatment feature, model type, feature count) |
+| `GET`  | `/api/v1/model/info` | Diagnostics | Production model metadata (algorithm, version, optimal threshold) |
+| `GET`  | `/health` | System Probe | Liveness probe returning 200 if container process is alive |
+| `GET`  | `/readiness` | System Probe | Readiness probe (returns 503 until model pipeline is loaded) |
 | `GET`  | `/metrics` | Observability | Prometheus metrics scraping endpoint |
+
 
 ---
 
@@ -206,6 +230,84 @@ curl -X POST "http://localhost:8000/predict/batch" \
 
 ---
 
+### POST `/api/v1/predict/batch/async` — Asynchronous Batch Scoring (Non-Blocking)
+
+Submits customer records for asynchronous background evaluation. Returns immediately with HTTP `202 Accepted`, a unique `job_id`, and a status polling URL. Essential for high-throughput batch scoring without HTTP timeout risks.
+
+#### cURL Example
+```bash
+curl -X POST "http://localhost:8000/api/v1/predict/batch/async" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "customers": [
+         {
+           "gender": "Female", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "No",
+           "tenure": 8, "PhoneService": "Yes", "MultipleLines": "No",
+           "InternetService": "Fiber optic", "OnlineSecurity": "No", "OnlineBackup": "No",
+           "DeviceProtection": "Yes", "TechSupport": "No", "StreamingTV": "Yes",
+           "StreamingMovies": "No", "Contract": "Month-to-month", "PaperlessBilling": "Yes",
+           "PaymentMethod": "Electronic check", "MonthlyCharges": 85.00, "TotalCharges": 680.00
+         }
+       ]
+     }'
+```
+
+#### Response Payload (`202 Accepted`)
+```json
+{
+  "job_id": "6a9e1d84-4b53-48b2-b1e8-782d49e1501b",
+  "status": "pending",
+  "created_at": 1773289000.12,
+  "total_customers": 1,
+  "poll_url": "/api/v1/predict/batch/jobs/6a9e1d84-4b53-48b2-b1e8-782d49e1501b"
+}
+```
+
+---
+
+### GET `/api/v1/predict/batch/jobs/{job_id}` — Poll Asynchronous Batch Job Status
+
+Polls the execution status and retrieves completed predictions for an asynchronous batch job.
+
+#### cURL Example
+```bash
+curl -X GET "http://localhost:8000/api/v1/predict/batch/jobs/6a9e1d84-4b53-48b2-b1e8-782d49e1501b"
+```
+
+#### Response Payload (`BatchJobStatusResponse`)
+```json
+{
+  "job_id": "6a9e1d84-4b53-48b2-b1e8-782d49e1501b",
+  "status": "completed",
+  "created_at": 1773289000.12,
+  "completed_at": 1773289000.45,
+  "total_customers": 1,
+  "result": {
+    "predictions": [
+      {
+        "churn_probability": 0.6920,
+        "risk_tier": "HIGH_RISK",
+        "will_churn": true,
+        "threshold_used": 0.34,
+        "explainability": { "is_month_to_month": 0.295 },
+        "conformal_prediction": { "prediction_set": ["Churn"], "confidence_level": 0.90, "is_uncertain": false },
+        "request_id": "c1f83a21-9d22-48a1-b844-3329fa014389"
+      }
+    ],
+    "total_customers": 1,
+    "high_risk_count": 1,
+    "medium_risk_count": 0,
+    "low_risk_count": 0,
+    "avg_churn_probability": 0.6920,
+    "request_id": "c1f83a21-9d22-48a1-b844-3329fa014389"
+  },
+  "error": null
+}
+```
+
+---
+
+
 ### GET `/predict/customer/{customer_id}` — Feast Feature Store Real-Time Prediction
 
 Fetches live entity attributes for a customer directly from the **Feast Online Store** (SQLite/Redis), hydrating all 19 raw features and routing through the serving pipeline in $< 10$ milliseconds.
@@ -320,15 +422,30 @@ Returns architecture and feature alignment specifications for the loaded EconML 
 
 ## 6. System & Observability Endpoints
 
-### GET `/health` — Operational Readiness Check
+### GET `/health` — Operational Liveness Check
 
-Used by Kubernetes liveness and readiness probes to confirm container health and model cache status.
+Used by Kubernetes liveness probes (`/health`) to confirm that the FastAPI worker process is running and accepting HTTP requests. Returns HTTP `200` with `status: "healthy"` (or `"degraded"` if model loading encountered an error).
 
 ```json
 {
   "status": "healthy",
   "model_loaded": true,
-  "version": "0.1.0"
+  "version": "1.0.0"
+}
+```
+
+### GET `/readiness` — Model Readiness Check
+
+Used by Kubernetes readiness probes (`/readiness`) to guarantee that the inference engine and ML model artifacts are fully loaded in memory before the Pod receives network ingress traffic.
+
+- **HTTP `200 OK`**: Service is fully initialized and actively serving predictions.
+- **HTTP `503 Service Unavailable`**: Artifacts are still hydrating; Kubernetes removes Pod from Service endpoint pool until ready.
+
+```json
+{
+  "status": "ready",
+  "model_loaded": true,
+  "version": "1.0.0"
 }
 ```
 

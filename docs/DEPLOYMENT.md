@@ -116,71 +116,63 @@ docker compose -f docker/docker-compose.yml down
 
 ## 4. Production Kubernetes Deployment Patterns
 
-### Recommended Resource Sizing
+Production manifests are structured using **Kustomize** and located in [`deploy/kubernetes/`](file:///home/deepak/customer-churn-mlops/deploy/kubernetes):
 
-| Container | CPU Request / Limit | Memory Request / Limit | Concurrency Model |
-|---|---|---|---|
-| **API Container** | `500m / 2000m` | `1Gi / 2Gi` | Uvicorn (4 async workers) |
-| **Dashboard** | `250m / 1000m` | `512Mi / 1Gi` | Streamlit WebSockets |
-| **Feast Redis Cache** | `250m / 500m` | `512Mi / 1Gi` | In-memory key-value |
+```
+deploy/kubernetes/
+├── kustomization.yaml   # Orchestration bundle & common labels
+├── namespace.yaml       # Isolated 'churn-serving' namespace
+├── configmap.yaml       # Production runtime environment configurations
+├── deployment.yaml      # Non-root, hardened Pod spec with decoupled probes
+├── service.yaml         # ClusterIP service with Prometheus scrape annotations
+└── hpa.yaml             # HorizontalPodAutoscaler (2 to 10 replicas, CPU/memory triggers)
+```
 
-### Kubernetes Pod Manifest (`api-deployment.yaml`)
+### Manifest Highlights & Cloud-Native Best Practices
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: churn-prediction-api
-  labels:
-    app: churn-api
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: churn-api
-  template:
-    metadata:
-      labels:
-        app: churn-api
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8000"
-        prometheus.io/path: "/metrics"
-    spec:
-      containers:
-        - name: api
-          image: churn-api:latest
-          command: ["uvicorn", "src.serving.api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
-          ports:
-            - containerPort: 8000
-          resources:
-            requests:
-              memory: "1Gi"
-              cpu: "500m"
-            limits:
-              memory: "2Gi"
-              cpu: "2000m"
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 2
-          envFrom:
-            - configMapRef:
-                name: churn-api-config
-            - secretRef:
-                name: churn-api-secrets
+1. **Hardened Pod Security Context**:
+   - `runAsNonRoot: true`, `runAsUser: 1000`, `fsGroup: 1000`.
+   - `allowPrivilegeEscalation: false` and `capabilities: drop: ["ALL"]`.
+   - Resource limits enforced (`cpu: 2000m`, `memory: 2048Mi`).
+2. **Decoupled Probe Semantics**:
+   - **Liveness Probe**: `GET /health` (`initialDelaySeconds: 15`, `periodSeconds: 10`, `failureThreshold: 3`). Restarts worker container only if the process deadlocks.
+   - **Readiness Probe**: `GET /readiness` (`initialDelaySeconds: 10`, `periodSeconds: 5`, `failureThreshold: 3`). Returns HTTP 503 until model artifacts are loaded in memory, preventing dropped requests during pod rollouts.
+3. **Horizontal Pod Autoscaling (HPA v2)**:
+   - Scales replica count dynamically between 2 and 10 pods when CPU utilization exceeds 75% or memory utilization exceeds 80%.
+4. **Prometheus Scraping Annotations**:
+   - Pod metadata exposes `prometheus.io/scrape: "true"`, `prometheus.io/path: "/metrics"`, and `prometheus.io/port: "8000"` for automatic metrics ingestion.
+
+### Offline Manifest Validation (Zero Cloud Cost)
+
+Manifests can be validated locally without connecting to or provisioning a live Kubernetes cluster:
+
+```bash
+# Offline dry-run compilation via Kustomize (runs in CI)
+make k8s-validate
+
+# Or inspect the compiled YAML output through Kustomize:
+kubectl kustomize deploy/kubernetes
+```
+
+### Local Cluster Testing (KinD - Kubernetes in Docker)
+
+To verify end-to-end scheduling and probe convergence on a free local cluster:
+
+```bash
+# 1. Spin up an ephemeral local cluster
+kind create cluster --name churn-cluster
+
+# 2. Deploy the platform via Kustomize
+kubectl apply -k deploy/kubernetes/
+
+# 3. Verify deployment rollout and probes
+kubectl get pods,svc,hpa -n churn-serving
+
+# 4. Port-forward the service to test locally
+kubectl port-forward svc/churn-api-service 8000:8000 -n churn-serving
+
+# 5. Tear down the cluster when finished
+kind delete cluster --name churn-cluster
 ```
 
 ---
@@ -217,6 +209,12 @@ poetry run python main.py retrain --force
 | `API_PORT` | `8000` | No | FastAPI bind port |
 | `API_URL` | `http://localhost:8000` | No | Streamlit → API connection endpoint |
 | `LOG_LEVEL` | `INFO` | No | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `LOG_FORMAT` | `text` | No | Log output format (`text` or `json` for Datadog / ELK ingestion) |
+| `RATE_LIMIT_ENABLED` | `true` | No | Enables sliding-window per-client IP request rate limiting |
+| `RATE_LIMIT_PER_MINUTE` | `600` | No | Sliding-window request cap per IP (default 600 req/min) |
+| `MODEL_NAME` | `churn-predictor` | No | Registered model identifier in MLflow Registry |
+| `CHAMPION_STAGE` | `Production` | No | Stage tag for production model artifacts |
+| `PREFECT_API_URL` | - | No | Prefect Cloud / Server workspace orchestration URL |
 | `DVC_REMOTE_URL` | - | No | Remote bucket storage (S3 / GCS) for raw data versioning |
 
 ---

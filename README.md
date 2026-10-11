@@ -3,11 +3,13 @@
 [![CI Pipeline](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/ci.yml)
 [![CD](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/cd.yml/badge.svg)](https://github.com/deepakj111/customer-churn-mlops/actions/workflows/cd.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/Tests-293%20Passed-brightgreen.svg?logo=pytest)](https://docs.pytest.org/)
+[![Tests](https://img.shields.io/badge/Tests-303%20Passed-brightgreen.svg?logo=pytest)](https://docs.pytest.org/)
 [![Type Checked: Mypy](https://img.shields.io/badge/Type%20Check-Mypy%20Strict-blue.svg)](https://mypy-lang.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![MLflow](https://img.shields.io/badge/MLflow-3.10+-0194E2.svg?logo=mlflow&logoColor=white)](https://mlflow.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Kustomize%20Ready-326CE5.svg?logo=kubernetes&logoColor=white)](deploy/kubernetes/)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-blue.svg)](CHANGELOG.md)
 [![DVC](https://img.shields.io/badge/DVC-Data%20Versioning-13ADC7.svg?logo=dvc&logoColor=white)](https://dvc.org/)
 [![Code style: black](https://img.shields.io/badge/Code%20Style-Black-000000.svg)](https://github.com/psf/black)
 
@@ -40,12 +42,16 @@ Key reports and architectural summaries:
 
 ## 📚 Detailed System Documentation
 
-Comprehensive architecture, operational manuals, and deployment handbooks:
+Comprehensive architecture, operational manuals, and governance handbooks:
 
-- 📡 [**API Reference Manual (`docs/API.md`)**](docs/API.md) — Complete REST endpoints, cURL examples, Pydantic schemas, Feast hydration, and Causal Uplift specifications.
+- 📡 [**API Reference Manual (`docs/API.md`)**](docs/API.md) — Complete REST endpoints (v1 routes, async batch scoring, readiness probes), cURL examples, Pydantic schemas, and Causal Uplift specifications.
 - 🏗️ [**System Architecture Guide (`docs/ARCHITECTURE.md`)**](docs/ARCHITECTURE.md) — Layered design, dependency graphs, Prefect pipeline workflows, and deep engineering design decisions.
-- 🚀 [**Production Deployment Guide (`docs/DEPLOYMENT.md`)**](docs/DEPLOYMENT.md) — Docker Compose stack, Kubernetes manifests, resource limits, and operational troubleshooting runbooks.
+- 🚀 [**Production Deployment Guide (`docs/DEPLOYMENT.md`)**](docs/DEPLOYMENT.md) — Docker Compose stack, Kubernetes Kustomize manifests, resource governance, and operational runbooks.
+- ☸️ [**Kubernetes Deployment Bundle (`deploy/kubernetes/README.md`)**](deploy/kubernetes/README.md) — Production Kustomize manifests, HPA autoscaling (2–10 pods), and zero-cost local validation (`make k8s-validate`).
 - 📊 [**Continuous Monitoring Guide (`docs/MONITORING.md`)**](docs/MONITORING.md) — Population Stability Index (PSI), Chi-squared drift, Wasserstein distance, Prometheus metrics, and automated retraining flows.
+- 🛡️ [**Security Policy (`SECURITY.md`)**](SECURITY.md) — Vulnerability disclosure process, OWASP API Top 10 headers, sliding-window rate limiting, and 3-tier input validation.
+- 🤝 [**Contributing Guidelines (`CONTRIBUTING.md`)**](CONTRIBUTING.md) — Developer setup, branching strategy, conventional commit conventions, and pull request checklist.
+- 📜 [**Changelog (`CHANGELOG.md`)**](CHANGELOG.md) — Semantic Versioning release notes across v0.9.0 and v1.0.0.
 
 ---
 
@@ -83,8 +89,9 @@ If someone clones this repository from scratch, here is the exact step-by-step s
 | 10 | `poetry run python main.py serve` | Starts FastAPI server on port 8000 | Live REST API (`http://localhost:8000`) |
 | 11 | `make dashboard` | Launches Streamlit dashboard (8501) | Interactive UI (`http://localhost:8501`) |
 | 12 | `make docker-up` | Runs 5-container Compose stack | Complete containerized platform |
-| 13 | `make test` | Runs all 293 pytest tests | 100% test pass rate |
+| 13 | `make test` | Runs all 303 pytest tests | 100% test pass rate |
 | 14 | `make lint` | Checks flake8 and mypy strict typing | 0 lint / type errors |
+| 15 | `make k8s-validate` | Validates K8s manifests offline | Zero-cost Kustomize validation |
 
 ### Stage 1: Installation & Data Pull
 ```bash
@@ -476,20 +483,25 @@ poetry run python main.py serve --port 8000
 
 ## 📡 API Reference
 
+The serving engine exposes versioned routes (`/api/v1/*`) alongside root aliases for backward compatibility. All responses include OWASP API Security Top 10 hardening headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store`, `Strict-Transport-Security`) and unique `X-Request-ID` tracing headers. A thread-safe sliding-window rate limiter enforces `600` req/min with standard RFC 6585 `429 Too Many Requests` responses.
+
 ### Serving Endpoints Summary
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/predict` | Single customer churn prediction (SHAP + Conformal sets) |
-| `POST` | `/predict/batch` | Vectorized batch prediction (1–100 customers) |
-| `GET`  | `/predict/customer/{id}` | Real-time prediction fetching raw features from Feast online store |
-| `POST` | `/uplift/predict` | Causal CATE treatment effect and prescriptive quadrant |
-| `POST` | `/uplift/batch` | Batch prescriptive campaign assignment (Persuadables, Sleeping Dogs) |
-| `GET`  | `/uplift/info` | Causal model metadata (treatment feature, model type) |
-| `GET`  | `/model/info` | Production model metadata (algorithm, version, optimal threshold) |
-| `GET`  | `/health` | Health check for load balancers / k8s probes |
-| `GET`  | `/metrics` | Prometheus metrics scrape target |
-| `GET`  | `/docs` | Interactive OpenAPI documentation |
+| Method | Path | Category | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/predict` | Predictive ML | Single customer churn prediction (SHAP + Conformal sets) |
+| `POST` | `/api/v1/predict/batch` | Predictive ML | Vectorized synchronous batch prediction (1–100 customers) |
+| `POST` | `/api/v1/predict/batch/async` | Asynchronous ML | Non-blocking async batch job submission (HTTP 202 Accepted) |
+| `GET`  | `/api/v1/predict/batch/jobs/{id}` | Asynchronous ML | Poll status and retrieve completed async batch predictions |
+| `GET`  | `/api/v1/predict/customer/{id}` | Feature Store | Real-time prediction fetching raw features from Feast online store |
+| `POST` | `/api/v1/uplift/predict` | Causal AI | Causal CATE treatment effect and prescriptive quadrant |
+| `POST` | `/api/v1/uplift/batch` | Causal AI | Batch prescriptive campaign assignment (Persuadables, Sleeping Dogs) |
+| `GET`  | `/api/v1/uplift/info` | Causal AI | Causal model metadata (treatment feature, model type) |
+| `GET`  | `/api/v1/model/info` | Diagnostics | Production model metadata (algorithm, version, optimal threshold) |
+| `GET`  | `/health` | System Probe | Liveness probe returning 200 if container process is alive |
+| `GET`  | `/readiness` | System Probe | Kubernetes readiness probe (returns 503 until model loads) |
+| `GET`  | `/metrics` | Observability | Prometheus time-series metrics scrape target |
+| `GET`  | `/docs` | Documentation | Interactive OpenAPI / Swagger UI documentation |
 
 *For complete curl commands, request bodies, and JSON schemas, see [**`docs/API.md`**](docs/API.md).*
 
@@ -497,13 +509,13 @@ poetry run python main.py serve --port 8000
 
 ## 🐳 Docker Deployment
 
-Deploy the entire microservice ecosystem with Docker Compose:
+Deploy the entire microservice ecosystem with Docker Compose, featuring explicit CPU and memory resource limits (`limits` & `reservations`):
 
 ```bash
 # Build and start all 5 services
 docker compose -f docker/docker-compose.yml up --build -d
 
-# Verify running services
+# Verify running services & health statuses
 docker compose -f docker/docker-compose.yml ps
 
 # Services available:
@@ -519,15 +531,53 @@ docker compose -f docker/docker-compose.yml down
 
 ---
 
-## 🧪 Testing & Quality Assurance
+## ☸️ Kubernetes Deployment (Kustomize)
 
-The project enforces strict software engineering standards with **293 tests**:
+The repository provides production-grade declarative Kubernetes manifests under [`deploy/kubernetes/`](deploy/kubernetes/) bundled via **Kustomize**:
+
+- **Rolling Updates**: Zero-downtime rolling update strategy (`maxSurge: 1`, `maxUnavailable: 0`).
+- **Decoupled Probes**: Liveness probe (`/health`) decoupled from Readiness probe (`/readiness`), preventing premature traffic routing.
+- **Horizontal Pod Autoscaling (HPA)**: Automatically scales between **2 and 10 pods** based on CPU (75%) and Memory (80%) utilization.
+- **Security & Governance**: Container runs with `runAsNonRoot: true`, user UID 1000, dropped Linux capabilities, and resource boundaries (500m/512Mi request, 2000m/2048Mi limit).
+
+### 1. Offline Validation (No Cloud Cluster Required — 100% Free)
+Validate and compile the complete Kubernetes manifest bundle locally without provisioning any live infrastructure:
 
 ```bash
-# Run complete test suite
+# Validate manifests via Makefile
+make k8s-validate
+
+# Or inspect the compiled YAML output through Kustomize
+kubectl kustomize deploy/kubernetes
+```
+
+### 2. Local Execution via `kind` (Kubernetes in Docker)
+Run a real ephemeral Kubernetes cluster locally inside Docker:
+
+```bash
+# 1. Create a local cluster inside Docker
+kind create cluster --name churn-cluster
+
+# 2. Deploy the Kustomize bundle
+kubectl apply -k deploy/kubernetes
+
+# 3. Port-forward the service to your workstation
+kubectl port-forward -n churn-serving svc/churn-api-service 8000:8000
+```
+
+*For complete manifest specifications, see [**`deploy/kubernetes/README.md`**](deploy/kubernetes/README.md) and [**`docs/DEPLOYMENT.md`**](docs/DEPLOYMENT.md).*
+
+---
+
+## 🧪 Testing & Quality Assurance
+
+The project enforces strict software engineering standards with **303 tests**:
+
+```bash
+# Run complete test suite with coverage
 make test
 
-# Run strict static type checking across all 33 source files
+# Run strict static type checking across all source files
 poetry run mypy src/
 
 # Run flake8 style checks
@@ -537,8 +587,8 @@ poetry run flake8 src/ tests/ scripts/
 ### Test Coverage Highlights
 - **Schema Contracts**: Pandera input schema validation and boundary checks.
 - **Unit Tests**: Pure function assertions for all 28 engineered features, cost-matrix optimization, calibration, and conformal prediction sets.
-- **Integration Tests**: FastAPI TestClient end-to-end verification of `/predict`, `/predict/batch`, `/predict/customer/{id}`, `/uplift/predict`, `/uplift/batch`, `/health`, and `/metrics`.
-- **Reproducibility**: Parameterized fixtures and deterministic random seeds.
+- **Integration Tests**: FastAPI TestClient end-to-end verification of `/predict`, `/predict/batch`, `/predict/batch/async`, `/predict/customer/{id}`, `/readiness`, `/health`, rate limiting 429 enforcement, and OWASP security headers.
+- **Reproducibility**: Parameterized fixtures, registered pytest markers (`slow`, `integration`, `unit`, `smoke`), and deterministic random seeds.
 
 ---
 
