@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: churn-api-config
+  namespace: churn-serving
+  labels:
+    app.kubernetes.io/name: customer-churn-mlops
+    app.kubernetes.io/component: serving-api
+data:
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_PER_MINUTE: "600"
+  CHAMPION_STAGE: "Production"

@@ -75,6 +75,9 @@ docker-up:   ## Start full local stack with Docker Compose
 docker-down:   ## Stop all Docker containers
 	docker compose -f docker/docker-compose.yml down
 
+k8s-validate:   ## Validate Kubernetes Kustomize manifests locally without a cluster
+	kubectl kustomize deploy/kubernetes > /dev/null
+
 clean:   ## Remove Python cache files
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "__pycache__" -delete

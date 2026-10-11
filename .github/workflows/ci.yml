@@ -76,6 +76,9 @@ jobs:
       - name: Type check (mypy)
         run: poetry run mypy src/
 
+      - name: Validate Kubernetes manifests (Kustomize)
+        run: kubectl kustomize deploy/kubernetes > /dev/null
+
   # --------------------------------------------------------------------------
   # Job 2: Test — full pytest suite with coverage
   # --------------------------------------------------------------------------
