@@ -8,12 +8,6 @@ __pycache__/
 dist/
 build/
 
-repo_code.py
-all_python_files.txt
-repo_code.txt
-repo_code*
-repo_export.txt
-
 # Jupyter checkpoints
 .ipynb_checkpoints/
 *.ipynb_metadata

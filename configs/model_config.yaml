@@ -1,6 +1,6 @@
 # configs/model_config.yaml
 
-model_name: customer-churn-lgbm          # <-- was "name:", that's the root cause
+model_name: customer-churn-lgbm
 algorithm: lightgbm
 champion_stage: Staging
 registered_model_name: customer-churn-lgbm
@@ -18,7 +18,7 @@ hyperparameters:
 
 cost_matrix:
   false_negative_cost: 500.0
-  false_positive_cost: 20.0
+  false_positive_cost: 50.0
 
 risk_tiers:
   high_risk_threshold: 0.60

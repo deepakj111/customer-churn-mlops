@@ -35,18 +35,21 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Awaitable, Callable
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
+from src import __version__
 from src.serving.model_loader import (
     get_model,
     get_model_info,
@@ -55,6 +58,9 @@ from src.serving.model_loader import (
     get_uplift_model,
 )
 from src.serving.schemas import (
+    BatchJobStatus,
+    BatchJobStatusResponse,
+    BatchJobSubmissionResponse,
     BatchPredictionRequest,
     BatchPredictionResponse,
     BatchUpliftResponse,
@@ -134,11 +140,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title="Customer Churn Prediction API",
     description=(
-        "REST API for predicting customer churn "
-        "using a LightGBM model with 28 engineered features. "
-        "Part of the Customer Churn MLOps Pipeline."
+        "Production REST API for predicting customer churn "
+        "using a calibrated LightGBM pipeline with 28 engineered features, "
+        "conformal uncertainty quantification, and causal uplift modeling. "
+        "Part of the Customer Churn MLOps Platform."
     ),
-    version="0.1.0",
+    version=__version__,
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -197,28 +204,135 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 # ---------------------------------------------------------------------------
-# Middleware — request ID injection
+# Rate Limiting & API Router Configuration
+# ---------------------------------------------------------------------------
+
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "600"))
+
+
+class SlidingWindowRateLimiter:
+    """
+    Thread-safe in-memory sliding window rate limiter.
+
+    Tracks request timestamps within a sliding window to provide smooth
+    rate limiting without boundary burst artifacts of fixed-window counters.
+    """
+
+    def __init__(self, max_requests: int = 600, window_seconds: float = 60.0) -> None:
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._requests: dict[str, list[float]] = defaultdict(list)
+
+    def check(self, client_ip: str) -> tuple[bool, int]:
+        now = time.time()
+        cutoff = now - self.window_seconds
+        valid = [t for t in self._requests.get(client_ip, []) if t > cutoff]
+        if len(valid) >= self.max_requests:
+            self._requests[client_ip] = valid
+            return False, 0
+        valid.append(now)
+        self._requests[client_ip] = valid
+        return True, self.max_requests - len(valid)
+
+    def reset(self) -> None:
+        """Clear rate limit history (primarily for test teardowns)."""
+        self._requests.clear()
+
+
+rate_limiter = SlidingWindowRateLimiter(max_requests=RATE_LIMIT_PER_MINUTE)
+
+# API v1 Router for structured versioning
+v1_router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Middleware — Request ID, Rate Limiting & OWASP Security Headers
 # ---------------------------------------------------------------------------
 
 
 @app.middleware("http")
-async def add_request_id(
+async def add_request_id_and_security_headers(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     """
-    Inject a unique request_id into every request.
+    Inject request_id, enforce rate limiting, and attach OWASP security headers.
 
-    The ID is added to request.state so endpoints and exception handlers
-    can include it in responses and logs. This is essential for debugging
-    production issues — support can trace a user's request across all
-    log files using this single ID.
+    The request_id is added to request.state so endpoints and exception
+    handlers can include it in responses and logs.
+
+    Rate limiting:
+        Enforces RATE_LIMIT_PER_MINUTE requests per minute per IP.
+        Bypasses system probes (/health, /readiness, /metrics) and documentation.
+        Returns 429 Too Many Requests with Retry-After header if exceeded.
+
+    Security headers:
+        Implements OWASP API Security Top 10 hardening headers.
     """
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
 
-    # Add request_id to response headers for frontend traceability
+    # Check rate limit (bypass system probes and OpenAPI docs)
+    path = request.url.path
+    is_probe_or_doc = path in (
+        "/health",
+        "/readiness",
+        "/metrics",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/api/v1/health",
+        "/api/v1/readiness",
+    )
+
+    if RATE_LIMIT_ENABLED and not is_probe_or_doc:
+        client_ip = request.headers.get(
+            "X-Forwarded-For", request.client.host if request.client else "unknown"
+        )
+        if "," in client_ip:
+            client_ip = client_ip.split(",")[0].strip()
+        allowed, remaining = rate_limiter.check(client_ip)
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content=ErrorDetail(
+                    error="rate_limit_exceeded",
+                    message=(
+                        "Too Many Requests: Rate limit exceeded. " "Please retry later."
+                    ),
+                    request_id=request_id,
+                ).model_dump(),
+                headers={
+                    "Retry-After": "60",
+                    "X-RateLimit-Limit": str(RATE_LIMIT_PER_MINUTE),
+                    "X-RateLimit-Remaining": "0",
+                    "X-Request-ID": request_id,
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Frame-Options": "DENY",
+                },
+            )
+    else:
+        remaining = RATE_LIMIT_PER_MINUTE
+
     response = await call_next(request)
+
+    # Traceability & Observability
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-RateLimit-Limit"] = str(RATE_LIMIT_PER_MINUTE)
+    response.headers["X-RateLimit-Remaining"] = str(remaining)
+
+    # Security headers (OWASP API Security Top 10)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
+
     return response
 
 
@@ -408,12 +522,104 @@ def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
     )
 
 
+def _process_batch_prediction(
+    batch: BatchPredictionRequest, request_id: str
+) -> BatchPredictionResponse:
+    """
+    Process batch prediction vectorised across all submitted customers.
+    """
+    from src.models.threshold import get_risk_tier
+
+    all_data = []
+    for customer in batch.customers:
+        row = customer.model_dump(mode="json")
+        row["SeniorCitizen"] = str(row["SeniorCitizen"])
+        all_data.append(row)
+    df = pd.DataFrame(all_data)
+
+    pipeline = get_model()
+    threshold = get_threshold()
+
+    probas = pipeline.predict_proba(df)[:, 1]
+    explanations = _explain_predictions(pipeline, df)
+    conformal = get_conformal_predictor()
+
+    predictions = []
+    for i, proba in enumerate(probas):
+        proba_float = float(proba)
+        risk_tier = RiskTier(get_risk_tier(proba_float))
+        explanation = explanations[i] if explanations else None
+
+        conformal_result = None
+        if conformal is not None:
+            try:
+                conformal_result = conformal.predict_single(df.iloc[[i]])
+            except Exception as e:
+                logger.warning("Conformal prediction failed: %s", e)
+
+        predictions.append(
+            PredictionResponse(
+                churn_probability=round(proba_float, 4),
+                risk_tier=risk_tier,
+                will_churn=proba_float >= threshold,
+                threshold_used=round(threshold, 4),
+                explainability=explanation,
+                conformal_prediction=conformal_result,
+                request_id=request_id,
+            )
+        )
+
+    high_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.HIGH)
+    medium_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.MEDIUM)
+    low_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.LOW)
+
+    for proba in probas:
+        CHURN_PROBABILITY_HISTOGRAM.observe(float(proba))
+
+    return BatchPredictionResponse(
+        predictions=predictions,
+        total_customers=len(predictions),
+        high_risk_count=high_risk,
+        medium_risk_count=medium_risk,
+        low_risk_count=low_risk,
+        avg_churn_probability=round(float(np.mean(probas)), 4),
+        request_id=request_id,
+    )
+
+
+# In-memory registry for background batch prediction tasks
+_BATCH_JOBS: dict[str, dict[str, Any]] = {}
+
+
+def _execute_async_batch_job(
+    job_id: str, batch: BatchPredictionRequest, request_id: str
+) -> None:
+    """Background task worker for asynchronous batch inference."""
+    try:
+        _BATCH_JOBS[job_id]["status"] = BatchJobStatus.PROCESSING
+        start_time = time.time()
+        result = _process_batch_prediction(batch, request_id)
+        PREDICTION_LATENCY.labels(endpoint="predict_batch_async").observe(
+            time.time() - start_time
+        )
+        _BATCH_JOBS[job_id]["status"] = BatchJobStatus.COMPLETED
+        _BATCH_JOBS[job_id]["result"] = result
+        _BATCH_JOBS[job_id]["completed_at"] = time.time()
+        logger.info("Async batch job %s completed successfully.", job_id)
+    except Exception as e:
+        logger.error("Async batch job %s failed: %s", job_id, e, exc_info=True)
+        PREDICTION_ERROR_COUNT.labels(endpoint="predict_batch_async").inc()
+        _BATCH_JOBS[job_id]["status"] = BatchJobStatus.FAILED
+        _BATCH_JOBS[job_id]["error"] = str(e)
+        _BATCH_JOBS[job_id]["completed_at"] = time.time()
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
 
-@app.get(
+@v1_router.get(
     "/health",
     response_model=HealthResponse,
     tags=["System"],
@@ -423,11 +629,12 @@ def _predict_single(df: pd.DataFrame, request_id: str) -> PredictionResponse:
 )
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint.
+    Liveness probe endpoint.
 
-    Returns model_loaded=False if the model hasn't been loaded yet.
-    The API still returns 200 — it's alive but not ready to serve
-    predictions. Use model_loaded for readiness probe logic.
+    Always returns 200 if the process is alive. Reports model_loaded
+    status for observability but does not gate on it — use /readiness
+    for Kubernetes readiness probes that should block traffic until
+    the model is loaded.
     """
     try:
         get_model()
@@ -438,11 +645,43 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="healthy" if model_loaded else "degraded",
         model_loaded=model_loaded,
-        version="0.1.0",
+        version=__version__,
     )
 
 
-@app.get(
+@v1_router.get(
+    "/readiness",
+    response_model=HealthResponse,
+    tags=["System"],
+    summary="Readiness probe",
+    description="Returns 200 only when the model is loaded and the service "
+    "is ready to serve predictions. Returns 503 otherwise. "
+    "Use this for Kubernetes readiness probes to prevent routing "
+    "traffic before the model is available.",
+)
+async def readiness_check() -> HealthResponse:
+    """
+    Readiness probe — returns 503 until the model is fully loaded.
+
+    Kubernetes readiness probes should point here. Unlike /health (liveness),
+    this endpoint will cause the pod to be removed from the Service's
+    endpoint list until the model is ready, preventing user-facing errors.
+    """
+    try:
+        get_model()
+        return HealthResponse(
+            status="ready",
+            model_loaded=True,
+            version=__version__,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded — service is not ready to serve predictions.",
+        )
+
+
+@v1_router.get(
     "/model/info",
     response_model=ModelInfoResponse,
     tags=["System"],
@@ -478,7 +717,7 @@ async def get_metrics() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@app.post(
+@v1_router.post(
     "/predict",
     response_model=PredictionResponse,
     tags=["Predictions"],
@@ -501,7 +740,6 @@ async def predict(
     The model then applies 28 engineered features internally before
     making the prediction.
     """
-    # Import here to use the type from schemas
     request_id = request.state.request_id
 
     logger.info("Prediction request received [request_id=%s]", request_id)
@@ -528,7 +766,6 @@ async def predict(
 
     except RuntimeError as e:
         PREDICTION_ERROR_COUNT.labels(endpoint="predict").inc()
-        # Model not loaded
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         PREDICTION_ERROR_COUNT.labels(endpoint="predict").inc()
@@ -544,13 +781,13 @@ async def predict(
         )
 
 
-@app.post(
+@v1_router.post(
     "/predict/batch",
     response_model=BatchPredictionResponse,
     tags=["Predictions"],
-    summary="Batch customer prediction",
+    summary="Batch customer prediction (synchronous)",
     description=(
-        "Predict churn for 1–100 customers in a single request. "
+        "Predict churn for 1–100 customers synchronously in a single request. "
         "Returns per-customer predictions and batch summary statistics."
     ),
 )
@@ -559,16 +796,9 @@ async def predict_batch(
     request: Request,
 ) -> BatchPredictionResponse:
     """
-    Predict churn for a batch of customers.
+    Predict churn for a batch of customers synchronously.
 
-    Processes each customer independently through the full Pipeline.
-    Individual prediction failures don't crash the entire batch —
-    they are logged and skipped (TODO: add per-customer error reporting
-    in a future iteration).
-
-    The batch response includes summary statistics showing how many
-    customers fall into each risk tier — immediately actionable for
-    the retention team.
+    Vectorised through the full pipeline for optimal inference latency.
     """
     request_id = request.state.request_id
 
@@ -581,88 +811,20 @@ async def predict_batch(
     start_time = time.time()
 
     try:
-        # Build a single DataFrame from all customers for efficient
-        # vectorised prediction instead of N individual calls.
-        # mode='json' serialises enums to plain strings — identical
-        # to the single-prediction path via _customer_to_dataframe().
-        all_data = []
-        for customer in batch.customers:
-            row = customer.model_dump(mode="json")
-            # Replicate preprocess.py's SeniorCitizen int→str cast.
-            row["SeniorCitizen"] = str(row["SeniorCitizen"])
-            all_data.append(row)
-        df = pd.DataFrame(all_data)
-
-        pipeline = get_model()
-        threshold = get_threshold()
-
-        # Vectorised prediction — much faster than N individual calls
-        probas = pipeline.predict_proba(df)[:, 1]
-
-        explanations = _explain_predictions(pipeline, df)
-
-        from src.models.threshold import get_risk_tier
-
-        conformal = get_conformal_predictor()
-
-        predictions = []
-        for i, proba in enumerate(probas):
-            proba_float = float(proba)
-            risk_tier = RiskTier(get_risk_tier(proba_float))
-            explanation = explanations[i] if explanations else None
-
-            conformal_result = None
-            if conformal is not None:
-                try:
-                    conformal_result = conformal.predict_single(df.iloc[[i]])
-                except Exception as e:
-                    logger.warning("Conformal prediction failed: %s", e)
-
-            predictions.append(
-                PredictionResponse(
-                    churn_probability=round(proba_float, 4),
-                    risk_tier=risk_tier,
-                    will_churn=proba_float >= threshold,
-                    threshold_used=round(threshold, 4),
-                    explainability=explanation,
-                    conformal_prediction=conformal_result,
-                    request_id=request_id,
-                )
-            )
-
-        high_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.HIGH)
-        medium_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.MEDIUM)
-        low_risk = sum(1 for p in predictions if p.risk_tier == RiskTier.LOW)
-
-        for proba in probas:
-            CHURN_PROBABILITY_HISTOGRAM.observe(float(proba))
-
+        response = _process_batch_prediction(batch, request_id)
         PREDICTION_LATENCY.labels(endpoint="predict_batch").observe(
             time.time() - start_time
         )
-
-        response = BatchPredictionResponse(
-            predictions=predictions,
-            total_customers=len(predictions),
-            high_risk_count=high_risk,
-            medium_risk_count=medium_risk,
-            low_risk_count=low_risk,
-            avg_churn_probability=round(float(np.mean(probas)), 4),
-            request_id=request_id,
-        )
-
         logger.info(
             "Batch prediction complete [request_id=%s]: "
-            "%d customers, avg_proba=%.4f, "
-            "high=%d, medium=%d, low=%d",
+            "%d customers, avg_proba=%.4f, high=%d, medium=%d, low=%d",
             request_id,
             response.total_customers,
             response.avg_churn_probability,
-            high_risk,
-            medium_risk,
-            low_risk,
+            response.high_risk_count,
+            response.medium_risk_count,
+            response.low_risk_count,
         )
-
         return response
 
     except RuntimeError as e:
@@ -682,7 +844,76 @@ async def predict_batch(
         )
 
 
-@app.get(
+@v1_router.post(
+    "/predict/batch/async",
+    response_model=BatchJobSubmissionResponse,
+    status_code=202,
+    tags=["Predictions"],
+    summary="Batch customer prediction (asynchronous background job)",
+    description=(
+        "Submit a batch of customers for non-blocking asynchronous processing. "
+        "Returns HTTP 202 Accepted with a job_id and poll URL. Designed for "
+        "large customer sets and microservice decoupling."
+    ),
+)
+async def submit_batch_async(
+    batch: BatchPredictionRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> BatchJobSubmissionResponse:
+    """Submit a batch prediction job for background execution."""
+    request_id = request.state.request_id
+    job_id = str(uuid.uuid4())
+    logger.info(
+        "Async batch prediction submitted [job_id=%s, request_id=%s]: %d customers",
+        job_id,
+        request_id,
+        len(batch.customers),
+    )
+    PREDICTION_REQUEST_COUNT.labels(endpoint="predict_batch_async").inc()
+
+    _BATCH_JOBS[job_id] = {
+        "job_id": job_id,
+        "status": BatchJobStatus.PENDING,
+        "created_at": time.time(),
+        "completed_at": None,
+        "total_customers": len(batch.customers),
+        "result": None,
+        "error": None,
+    }
+
+    background_tasks.add_task(_execute_async_batch_job, job_id, batch, request_id)
+
+    return BatchJobSubmissionResponse(
+        job_id=job_id,
+        status=BatchJobStatus.PENDING,
+        created_at=_BATCH_JOBS[job_id]["created_at"],
+        total_customers=len(batch.customers),
+        poll_url=f"/api/v1/predict/batch/jobs/{job_id}",
+    )
+
+
+@v1_router.get(
+    "/predict/batch/jobs/{job_id}",
+    response_model=BatchJobStatusResponse,
+    tags=["Predictions"],
+    summary="Poll status of asynchronous batch prediction job",
+    description=(
+        "Check the execution status and retrieve results of an async batch job."
+    ),
+)
+async def get_batch_job_status(job_id: str) -> BatchJobStatusResponse:
+    """Retrieve current status or completed result of a background batch job."""
+    job = _BATCH_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Batch prediction job '{job_id}' not found.",
+        )
+    return BatchJobStatusResponse(**job)
+
+
+@v1_router.get(
     "/predict/customer/{customer_id}",
     response_model=PredictionResponse,
     tags=["Predictions"],
@@ -872,7 +1103,7 @@ def _predict_uplift_df(
     return results
 
 
-@app.get(
+@v1_router.get(
     "/uplift/info",
     tags=["Causal AI"],
     summary="Causal uplift model metadata",
@@ -892,7 +1123,7 @@ async def uplift_info() -> dict[str, Any]:
     return info
 
 
-@app.post(
+@v1_router.post(
     "/uplift/predict",
     response_model=UpliftPredictionResponse,
     tags=["Causal AI"],
@@ -929,7 +1160,7 @@ async def predict_uplift(
         )
 
 
-@app.post(
+@v1_router.post(
     "/uplift/batch",
     response_model=BatchUpliftResponse,
     tags=["Causal AI"],
@@ -991,3 +1222,13 @@ async def predict_uplift_batch(
             status_code=500,
             detail=f"Batch uplift prediction failed: {str(e)}",
         )
+
+
+# ---------------------------------------------------------------------------
+# Router Registration — Versioned Prefix & Root Backward Compatibility
+# ---------------------------------------------------------------------------
+
+# Mount under /api/v1 for production versioned API clients
+app.include_router(v1_router, prefix="/api/v1")
+# Mount at root for seamless backward compatibility
+app.include_router(v1_router)

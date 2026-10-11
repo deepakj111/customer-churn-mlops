@@ -43,7 +43,7 @@ def cmd_retrain(args: argparse.Namespace) -> None:
     from pipelines.retraining_pipeline import run_retraining_pipeline
 
     print("🔄 Evaluating Production Drift & Retraining Pipeline...")
-    result = run_retraining_pipeline(force=args.force)
+    result = run_retraining_pipeline(force_retrain=args.force)
     print("\n✅ Retraining Pipeline Execution Complete!")
     print(f"Retrain Triggered: {result.get('retrain_triggered')}")
     print(f"Trigger Reasons:   {result.get('reasons')}")
@@ -55,18 +55,12 @@ def cmd_monitor(args: argparse.Namespace) -> None:
     from scripts.generate_drift_report import main as generate_drift
 
     print("📊 Generating Data & Prediction Drift Report...")
-    # Pass current data argument if provided
-    sys_argv_backup = sys.argv
-    cli_args = ["generate_drift_report.py"]
+    cli_args: list[str] = []
     if args.current:
         cli_args.extend(["--current", args.current])
     if args.output:
         cli_args.extend(["--output", args.output])
-    sys.argv = cli_args
-    try:
-        generate_drift()
-    finally:
-        sys.argv = sys_argv_backup
+    generate_drift(cli_args=cli_args if cli_args else None)
     print("✅ Drift Report Generated.")
 
 

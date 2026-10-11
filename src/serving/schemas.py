@@ -563,3 +563,75 @@ class ErrorDetail(BaseModel):
         default=None,
         description="Request identifier for support reference.",
     )
+
+
+class BatchJobStatus(str, Enum):
+    """Execution status for asynchronous batch prediction jobs."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class BatchJobSubmissionResponse(BaseModel):
+    """Response returned when an async batch prediction job is submitted."""
+
+    job_id: str = Field(
+        ...,
+        description="Unique identifier for the submitted batch job.",
+        examples=["550e8400-e29b-41d4-a716-446655440000"],
+    )
+    status: BatchJobStatus = Field(
+        default=BatchJobStatus.PENDING,
+        description="Initial status of the batch job.",
+        examples=[BatchJobStatus.PENDING],
+    )
+    created_at: float = Field(
+        ...,
+        description="Unix timestamp when the job was accepted.",
+        examples=[1700000000.0],
+    )
+    total_customers: int = Field(
+        ...,
+        description="Number of customer records submitted in this batch.",
+        examples=[25],
+    )
+    poll_url: str = Field(
+        ...,
+        description="URL to poll for job status and results.",
+        examples=["/api/v1/predict/batch/jobs/550e8400-e29b-41d4-a716-446655440000"],
+    )
+
+
+class BatchJobStatusResponse(BaseModel):
+    """Status and result response for an asynchronous batch prediction job."""
+
+    job_id: str = Field(
+        ...,
+        description="Unique identifier for the batch job.",
+    )
+    status: BatchJobStatus = Field(
+        ...,
+        description="Current execution status.",
+    )
+    created_at: float = Field(
+        ...,
+        description="Unix timestamp when the job was submitted.",
+    )
+    completed_at: float | None = Field(
+        default=None,
+        description="Unix timestamp when the job completed, or None if still running.",
+    )
+    total_customers: int = Field(
+        ...,
+        description="Number of customer records in this batch.",
+    )
+    result: BatchPredictionResponse | None = Field(
+        default=None,
+        description="Full batch prediction results once status is 'completed'.",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error detail message if the job failed.",
+    )

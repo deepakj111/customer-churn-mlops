@@ -1,11 +1,56 @@
+"""
+Centralized logging configuration for the Customer Churn MLOps platform.
+
+Provides both human-readable and structured JSON log formats:
+    - TEXT format (default): For local development and notebook debugging.
+    - JSON format: For production deployments where logs are aggregated by
+      ELK, Datadog, CloudWatch, or similar platforms. JSON logs enable
+      structured querying (e.g., filter by request_id, model_version).
+
+Configuration via environment variables:
+    LOG_LEVEL:   DEBUG | INFO | WARNING | ERROR (default: INFO)
+    LOG_FORMAT:  text | json (default: text)
+
+Public API:
+    get_logger(name)  → configured Python Logger
+"""
+
+import json
 import logging
 import os
 import sys
 from pathlib import Path
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+LOG_FORMAT_TYPE = os.getenv("LOG_FORMAT", "text").lower()
+TEXT_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+class _JSONFormatter(logging.Formatter):
+    """
+    Structured JSON log formatter for production log aggregation.
+
+    Each log line is a single JSON object with consistent keys:
+        timestamp, level, logger, message, module, funcName, lineno
+
+    This enables log platforms to parse, index, and query logs without
+    fragile regex patterns on free-text log lines.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "timestamp": self.formatTime(record, DATE_FORMAT),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "funcName": record.funcName,
+            "lineno": record.lineno,
+        }
+        if record.exc_info and record.exc_info[1]:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry, default=str)
 
 
 def get_logger(
@@ -38,7 +83,11 @@ def get_logger(
     level = getattr(logging, LOG_LEVEL, logging.INFO)
     logger.setLevel(level)
 
-    formatter = logging.Formatter(fmt=LOG_FORMAT, datefmt=DATE_FORMAT)
+    # Select formatter based on LOG_FORMAT environment variable
+    if LOG_FORMAT_TYPE == "json":
+        formatter = _JSONFormatter()
+    else:
+        formatter = logging.Formatter(fmt=TEXT_FORMAT, datefmt=DATE_FORMAT)
 
     # Console handler — always active
     console_handler = logging.StreamHandler(sys.stdout)

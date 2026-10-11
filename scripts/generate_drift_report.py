@@ -32,8 +32,14 @@ from src.utils.logging import get_logger  # noqa: E402
 logger = get_logger(__name__)
 
 
-def main() -> None:
-    """Generate a drift monitoring report."""
+def main(cli_args: list[str] | None = None) -> None:
+    """Generate a drift monitoring report.
+
+    Args:
+        cli_args: Optional list of CLI arguments. If None, reads from sys.argv.
+                  This allows callers (e.g., main.py) to pass arguments directly
+                  without the brittle sys.argv manipulation anti-pattern.
+    """
     parser = argparse.ArgumentParser(description="Generate a drift monitoring report.")
     parser.add_argument(
         "--current",
@@ -50,7 +56,7 @@ def main() -> None:
         default="results/metrics/drift_results.json",
         help="Path to save the JSON drift report.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(cli_args)
 
     # Load reference data
     logger.info("Loading reference dataset...")

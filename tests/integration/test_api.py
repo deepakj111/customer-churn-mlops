@@ -484,3 +484,123 @@ class TestUpliftEndpoints:
             + data["sleeping_dogs_count"]
             <= 2
         )
+
+
+class TestProductionReadinessAndSecurity:
+    """Tests for Kubernetes readiness probes, security headers, and rate limiting."""
+
+    def test_readiness_probe_success(self, client):
+        """Readiness returns 200 and model_loaded=True once model is ready."""
+        response = client.get("/readiness")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ready"
+        assert data["model_loaded"] is True
+        assert "version" in data
+
+    def test_security_headers_present(self, client):
+        """Responses must contain OWASP Top 10 security headers."""
+        response = client.get("/health")
+        assert response.status_code == 200
+        headers = response.headers
+        assert headers.get("X-Content-Type-Options") == "nosniff"
+        assert headers.get("X-Frame-Options") == "DENY"
+        assert headers.get("Cache-Control") == "no-store"
+        assert "Strict-Transport-Security" in headers
+
+    def test_rate_limiting_headers(self, client):
+        """Responses must include X-RateLimit headers."""
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert "X-RateLimit-Limit" in response.headers
+        assert "X-RateLimit-Remaining" in response.headers
+
+    def test_rate_limiting_enforcement(self, client, valid_customer):
+        """Exceeding the rate limit must return HTTP 429 with Retry-After header."""
+        from src.serving.api import rate_limiter
+
+        original_max = rate_limiter.max_requests
+        try:
+            rate_limiter.max_requests = 2
+            rate_limiter.reset()
+
+            # First 2 requests succeed
+            r1 = client.post("/predict", json=valid_customer)
+            r2 = client.post("/predict", json=valid_customer)
+            assert r1.status_code == 200
+            assert r2.status_code == 200
+
+            # 3rd request should be blocked
+            r3 = client.post("/predict", json=valid_customer)
+            assert r3.status_code == 429
+            assert r3.headers.get("Retry-After") == "60"
+            data = r3.json()
+            assert data["error"] == "rate_limit_exceeded"
+        finally:
+            rate_limiter.max_requests = original_max
+            rate_limiter.reset()
+
+
+class TestApiV1Versioning:
+    """Tests for API versioning under /api/v1 prefix."""
+
+    def test_v1_predict_single(self, client, valid_customer):
+        """Endpoint /api/v1/predict returns standard prediction response."""
+        response = client.post("/api/v1/predict", json=valid_customer)
+        assert response.status_code == 200
+        data = response.json()
+        assert "churn_probability" in data
+        assert "risk_tier" in data
+
+    def test_v1_predict_batch(self, client, valid_customer):
+        """Endpoint /api/v1/predict/batch returns batch response."""
+        response = client.post(
+            "/api/v1/predict/batch", json={"customers": [valid_customer]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_customers"] == 1
+
+    def test_v1_model_info(self, client):
+        """Endpoint /api/v1/model/info returns model metadata."""
+        response = client.get("/api/v1/model/info")
+        assert response.status_code == 200
+        assert "algorithm" in response.json()
+
+    def test_v1_readiness(self, client):
+        """Endpoint /api/v1/readiness returns ready."""
+        response = client.get("/api/v1/readiness")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+
+
+class TestAsyncBatchProcessing:
+    """Tests for asynchronous batch submission and status polling."""
+
+    def test_async_batch_lifecycle(self, client, valid_customer, high_risk_customer):
+        """Submit async batch job, poll status, and verify results."""
+        payload = {"customers": [valid_customer, high_risk_customer]}
+        response = client.post("/api/v1/predict/batch/async", json=payload)
+        assert response.status_code == 202
+        data = response.json()
+        assert "job_id" in data
+        assert data["status"] in ("pending", "processing", "completed")
+        assert data["total_customers"] == 2
+        assert "poll_url" in data
+
+        job_id = data["job_id"]
+
+        # Poll the job status endpoint
+        poll_resp = client.get(f"/api/v1/predict/batch/jobs/{job_id}")
+        assert poll_resp.status_code == 200
+        job_data = poll_resp.json()
+        assert job_data["job_id"] == job_id
+        # In TestClient, background tasks run synchronously during request lifecycle
+        assert job_data["status"] == "completed"
+        assert job_data["result"] is not None
+        assert job_data["result"]["total_customers"] == 2
+
+    def test_async_batch_not_found(self, client):
+        """Polling non-existent job ID returns 404."""
+        response = client.get("/api/v1/predict/batch/jobs/non-existent-uuid")
+        assert response.status_code == 404
