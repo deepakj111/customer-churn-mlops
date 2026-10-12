@@ -16,18 +16,22 @@ Output:
 """
 
 import json
+import sys
 from pathlib import Path
 
-import numpy as np
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import train_test_split
+# Ensure project root is on sys.path for `src.*` imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.data.ingest import load_for_training
-from src.data.preprocess import run_preprocessing
-from src.data.validate import validate_raw_data
-from src.models.conformal import ConformalChurnPredictor
-from src.models.pipeline import build_pipeline
-from src.utils.logging import get_logger
+import numpy as np  # noqa: E402
+from sklearn.calibration import CalibratedClassifierCV  # noqa: E402
+from sklearn.model_selection import train_test_split  # noqa: E402
+
+from src.data.ingest import load_for_training  # noqa: E402
+from src.data.preprocess import run_preprocessing  # noqa: E402
+from src.data.validate import validate_raw_data  # noqa: E402
+from src.models.conformal import ConformalChurnPredictor  # noqa: E402
+from src.models.pipeline import build_pipeline  # noqa: E402
+from src.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

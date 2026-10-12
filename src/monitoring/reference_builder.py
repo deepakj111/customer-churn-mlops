@@ -176,3 +176,13 @@ def get_reference_metadata(
         "Reference metadata loaded — created at: %s", metadata.get("created_at")
     )
     return cast(dict[str, Any], metadata)
+
+
+def load_reference_dataset(data_dir: Path | None = None) -> pd.DataFrame:
+    """
+    Load reference features DataFrame.
+
+    Convenience wrapper returning only the DataFrame portion of load_reference.
+    """
+    df, _ = load_reference(data_dir=data_dir)
+    return df

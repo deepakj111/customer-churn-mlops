@@ -43,6 +43,16 @@ A common question in applied tabular machine learning is whether emerging Tabula
 | **Deep Learning** | **FT-Transformer** | 0.8342 ± 0.012 | 0.6380 ± 0.018 | 0.1425 | **45.30 ms** |
 | **Foundation Model** | **TabPFN (Zero-Shot)** | 0.8291 ± 0.014 | 0.6295 ± 0.021 | 0.1460 | **120.40 ms** |
 
+### Visual Comparative Diagnostics
+
+| Algorithmic Scan (10 Models) | Bayesian Hyperparameter Tuning Lift |
+|:---:|:---:|
+| ![Phase 1 Algorithm Scan](figures/benchmarks/phase1_algorithm_scan.png) | ![Phase 2 Tuning Lift](figures/benchmarks/phase2_tuning_lift.png) |
+
+| Optuna Trial Convergence | ROC & Precision-Recall Curves |
+|:---:|:---:|
+| ![Optuna History](figures/benchmarks/phase2_optuna_history.png) | ![Tuned Model Curves](figures/benchmarks/tuned_models_curves.png) |
+
 ---
 
 ## 4. Hypothesis Testing: The Nadeau-Bengio Corrected t-Test

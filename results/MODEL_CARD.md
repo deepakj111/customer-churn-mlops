@@ -55,6 +55,10 @@ Feature selection utilizes a **5-stage consensus voting architecture**:
 - Stage 4: LightGBM recursive feature importance.
 - Stage 5: Multicollinearity Variance Inflation Factor (VIF < 10) filtering.
 
+| Consensus Voting Selection Matrix | Top Selected Feature Gain & Importance |
+|:---:|:---:|
+| ![Consensus Selection Results](figures/features/feat_eng_09_selection_results.png) | ![Feature Importance](figures/evaluation/feature_importance.png) |
+
 ---
 
 ## 4. Quantitative Evaluation & Performance
@@ -72,6 +76,16 @@ Feature selection utilizes a **5-stage consensus voting architecture**:
 | **Expected Value / User** | -\$98.40 | -\$86.20 | **-\$63.15** |
 
 *(Expected value reflects net savings of over \$170,000 across a 10,000 customer cohort compared to a 0.50 threshold)*
+
+### Performance Diagnostics & Business Impact
+
+| Asymmetric Confusion Matrices ($p=0.50$ vs $p^*=0.34$) | Economic Value & Savings per Cohort |
+|:---:|:---:|
+| ![Confusion Matrices](figures/evaluation/confusion_matrices.png) | ![Business Impact](figures/evaluation/business_impact.png) |
+
+| Decision Threshold Sensitivity Curve | PR-AUC vs Precision-Recall Scatter |
+|:---:|:---:|
+| ![Threshold Sensitivity](figures/evaluation/threshold_sensitivity.png) | ![Precision Recall Scatter](figures/evaluation/precision_recall_scatter.png) |
 
 ---
 

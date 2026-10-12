@@ -1,6 +1,6 @@
 # Production Drift & Population Stability Monitoring Report
 
-**Generated:** 2026-10-10T15:00:57.243998+00:00
+**Generated:** 2026-10-12T03:55:21.565151+00:00
 **Evaluation Scope:** Continuous Distribution Drift Detection against Baseline Snapshot
 
 ---
@@ -12,7 +12,7 @@
 | **Overall Drift Status** | False | ✅ **NO DRIFT DETECTED (STABLE)** |
 | **Reference Snapshot Shape** | `(7043, 47)` | Baseline reference |
 | **Current Production Shape** | `(7043, 47)` | Production stream |
-| **Drifted Features Count** | `0` | Drifted alert threshold $\ge 3$ |
+| **Drifted Features** | `0` | Alert threshold $\ge 3$ |
 | **Prediction Drift Score (Wasserstein)** | `0.0000` | Threshold: 0.10 |
 
 ---
@@ -22,7 +22,7 @@
 - **Numerical Features (Population Stability Index - PSI)**:
   - $\text{PSI} < 0.10$: Minimal shift, distribution stable.
   - $0.10 \le \text{PSI} < 0.20$: Moderate shift, warning trigger.
-  - $\text{PSI} \ge 0.20$: Significant distributional drift, automatic retraining trigger.
+  - $\text{PSI} \ge 0.20$: Significant shift, auto-retrain trigger.
 - **Categorical Features**:
   - Two-sample Chi-Square goodness-of-fit test (Significance level $\alpha = 0.05$).
 - **Prediction Drift**:
@@ -55,5 +55,7 @@ _None. All feature distributions align with baseline._
 
 ## 5. Automated Operational Recommendations
 
-1. **Retraining Action**: If overall drift is flagged, execute `poetry run python main.py retrain` to initiate automated champion-challenger re-evaluation.
-2. **Monitoring Dashboards**: Real-time feature PSI decile distribution is available in the Streamlit monitoring tab (`poetry run streamlit run dashboards/streamlit_app.py`).
+1. **Retraining Action**: If overall drift is flagged, execute
+   `poetry run python main.py retrain` to initiate champion-challenger tournament.
+2. **Monitoring Dashboards**: Real-time feature PSI decile distribution is available
+   in the Streamlit monitoring tab (`make dashboard`).

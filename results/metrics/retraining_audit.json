@@ -1,0 +1,9 @@
+{
+    "timestamp": "2026-10-12T03:42:54.647495+00:00",
+    "action": "REJECTED",
+    "challenger_roc_auc": 0.8337531652775562,
+    "champion_roc_auc": 0.9419924452607671,
+    "difference": -0.10823927998321092,
+    "p_value": 6e-06,
+    "decision_rationale": "Challenger failed to demonstrate statistical superiority."
+}

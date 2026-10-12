@@ -4,13 +4,34 @@
         "ROC-AUC_std": 0.0069,
         "F1": 0.5755,
         "Brier": 0.1369,
-        "Latency_ms_per_sample": 1.0321
+        "Latency_ms_per_sample": 1.1665,
+        "fold_auc_scores": [
+            0.8519,
+            0.8392,
+            0.8359
+        ]
     },
     "LightGBM": {
         "ROC-AUC": 0.8314,
         "ROC-AUC_std": 0.0074,
         "F1": 0.6073,
         "Brier": 0.157,
-        "Latency_ms_per_sample": 0.0409
+        "Latency_ms_per_sample": 0.0432,
+        "fold_auc_scores": [
+            0.8418,
+            0.8256,
+            0.8267
+        ]
+    },
+    "statistical_comparison": {
+        "n_comparisons": 1,
+        "bonferroni_alpha": 0.05,
+        "LightGBM_vs_FT-Transformer_ROC-AUC_p_value": 0.035452,
+        "LightGBM_vs_FT-Transformer_ROC-AUC_cohens_d": -4.7178,
+        "LightGBM_vs_FT-Transformer_ROC-AUC_significant": true,
+        "LightGBM_vs_FT-Transformer_ROC-AUC_ci": [
+            -0.0201,
+            -0.0018
+        ]
     }
 }

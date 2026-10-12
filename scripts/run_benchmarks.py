@@ -13,25 +13,29 @@ We evaluate:
 """
 
 import json
+import sys
 import time
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-from sklearn.metrics import brier_score_loss, f1_score, roc_auc_score
-from sklearn.model_selection import StratifiedKFold
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer
+# Ensure project root is on sys.path for `src.*` imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.data.ingest import load_for_training
-from src.data.preprocess import run_preprocessing
-from src.data.validate import validate_raw_data
-from src.features.feature_store import engineer_features
-from src.models.ft_transformer_wrapper import FTTransformerWrapper
-from src.models.pipeline import build_pipeline, get_preprocessor
-from src.models.statistical_comparison import compare_models
-from src.models.tabpfn_wrapper import TabPFNWrapper
-from src.utils.logging import get_logger
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+from sklearn.metrics import brier_score_loss, f1_score, roc_auc_score  # noqa: E402
+from sklearn.model_selection import StratifiedKFold  # noqa: E402
+from sklearn.pipeline import Pipeline  # noqa: E402
+from sklearn.preprocessing import FunctionTransformer  # noqa: E402
+
+from src.data.ingest import load_for_training  # noqa: E402
+from src.data.preprocess import run_preprocessing  # noqa: E402
+from src.data.validate import validate_raw_data  # noqa: E402
+from src.features.feature_store import engineer_features  # noqa: E402
+from src.models.ft_transformer_wrapper import FTTransformerWrapper  # noqa: E402
+from src.models.pipeline import build_pipeline, get_preprocessor  # noqa: E402
+from src.models.statistical_comparison import compare_models  # noqa: E402
+from src.models.tabpfn_wrapper import TabPFNWrapper  # noqa: E402
+from src.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

@@ -102,11 +102,22 @@ class DriftReport:
             "summary": self.summary,
         }
 
-        # Add per-feature scores
+        # Add per-feature scores and feature table
+        features_list = []
         for feat_result in self.numerical_drift + self.categorical_drift:
             result[f"drift_{feat_result.feature_name}"] = round(
                 feat_result.drift_score, 4
             )
+            features_list.append(
+                {
+                    "feature": feat_result.feature_name,
+                    "drift_score": round(feat_result.drift_score, 4),
+                    "is_drifted": feat_result.is_drifted,
+                    "method": feat_result.method,
+                    "threshold": feat_result.threshold,
+                }
+            )
+        result["features"] = features_list
 
         return result
 

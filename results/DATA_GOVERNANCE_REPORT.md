@@ -56,6 +56,10 @@ The raw dataset provides 19 baseline attributes. The production feature engineer
 
 All feature transformations are encapsulated inside `sklearn.preprocessing.FunctionTransformer` within the `Pipeline` object to eliminate cross-fold data leakage during cross-validation.
 
+| Domain Feature Lift vs Raw Attributes | Engineered Bivariate Lift Analysis |
+|:---:|:---:|
+| ![Raw vs Engineered Lift](figures/features/feature_eng_03_raw_vs_engineered.png) | ![Feature Lift Analysis](figures/features/feature_eng_05_feature_lift_analysis.png) |
+
 ---
 
 ## 4. Feature Store Topology (Feast)
@@ -89,6 +93,10 @@ To prevent the curse of dimensionality and tree over-fitting across the 47 combi
 3. **Stage 3: L1 Sparse Regularization**: Prunes zeroed coefficients via Lasso / Logistic Regression with L1 penalty.
 4. **Stage 4: Gradient Boosting Split Gain**: Ranks LightGBM feature gain contributions.
 5. **Stage 5: Multicollinearity Variance Inflation Factor (VIF)**: Prunes features with $\text{VIF} \ge 10$ to ensure model stability.
+
+| 5-Stage Consensus Feature Retention Matrix | Feature Selection 5-Fold CV Validation |
+|:---:|:---:|
+| ![Consensus Voting Results](figures/features/feat_eng_09_selection_results.png) | ![Selection CV Comparison](figures/features/feat_eng_10_selection_cv_comparison.png) |
 
 ---
 

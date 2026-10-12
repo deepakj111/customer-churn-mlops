@@ -2,16 +2,16 @@
     "model_name": "customer-churn-lgbm",
     "algorithm": "lightgbm",
     "feature_count": 19,
-    "optimal_threshold": 0.03,
+    "optimal_threshold": 0.05,
     "f1_threshold": 0.34,
     "cv_mean_roc_auc": 0.8254,
     "cv_std_roc_auc": 0.0101,
     "test_roc_auc": 0.8225,
     "test_pr_auc": 0.6071,
-    "test_recall": 0.992,
-    "test_precision": 0.3257,
-    "estimated_savings": 170140.0,
+    "test_recall": 0.9492,
+    "test_precision": 0.3597,
+    "estimated_savings": 145900.0,
     "gates_passed": false,
-    "mlflow_run_id": "c2243458c85e4437b58d90b0d0210aeb",
-    "timestamp": "2026-10-10T12:05:52.985277+00:00"
+    "mlflow_run_id": "d7238aab5cab49f88a9bcd1b2f23ea93",
+    "timestamp": "2026-10-12T03:40:37.674361+00:00"
 }

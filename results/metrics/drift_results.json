@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-10T15:00:57.243998+00:00",
+  "timestamp": "2026-10-12T03:55:21.565151+00:00",
   "reference_rows": 7043,
   "current_rows": 7043,
   "prediction_drift_score": 0.0,
@@ -54,5 +54,336 @@
   "drift_PaperlessBilling": 1.0,
   "drift_PaymentMethod": 1.0,
   "drift_tenure_group": 1.0,
-  "drift_monthly_charge_bin": 1.0
+  "drift_monthly_charge_bin": 1.0,
+  "features": [
+    {
+      "feature": "tenure",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "MonthlyCharges",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "TotalCharges",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "is_month_to_month",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "service_adoption_count",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "has_protection_bundle",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "charge_to_tenure_ratio",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "is_fiber_optic",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "avg_charge_per_service",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "has_family",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "is_isolated",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "senior_no_support",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "is_auto_pay",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "is_electronic_check",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "is_high_monthly_charge",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "charges_gap",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "has_internet",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "streaming_count",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "security_service_count",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "has_full_streaming",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "internet_addon_count",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "has_no_internet_addons",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "contract_numeric",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "is_committed_customer",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "m2m_and_fiber",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "new_high_value_customer",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "fiber_no_security",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "paperless_and_echeck",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "composite_churn_risk",
+      "drift_score": 0.0,
+      "is_drifted": false,
+      "method": "psi",
+      "threshold": 0.25
+    },
+    {
+      "feature": "gender",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "SeniorCitizen",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "Partner",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "Dependents",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "PhoneService",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "MultipleLines",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "InternetService",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "OnlineSecurity",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "OnlineBackup",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "DeviceProtection",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "TechSupport",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "StreamingTV",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "StreamingMovies",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "Contract",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "PaperlessBilling",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "PaymentMethod",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "tenure_group",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    },
+    {
+      "feature": "monthly_charge_bin",
+      "drift_score": 1.0,
+      "is_drifted": false,
+      "method": "chi_squared",
+      "threshold": 0.05
+    }
+  ]
 }

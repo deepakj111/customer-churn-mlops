@@ -27,6 +27,7 @@ Structured JSON evaluation results ingested by CI/CD performance gates, monitori
 | `conformal_results.json` | `scripts/train_conformal.py` | MAPIE coverage (89.28% @ 90% target, 94.46% @ 95% target) and singleton set efficiency rates (70.83%). |
 | `uplift_results.json` | `scripts/train_uplift.py` | Causal CATE customer quadrant breakdown: Persuadables (978), Sleeping Dogs (210), Sure Things (1,777), Lost Causes (508). |
 | `drift_results.json` | `scripts/generate_drift_report.py` | Feature-level PSI decile metrics, Chi-squared categorical shift values, and Wasserstein prediction drift scores. |
+| `retraining_audit.json` | `pipelines/retraining_pipeline.py` | Challenger promotion/rejection decision, Nadeau-Bengio corrected t-test p-value, and statistical rationale. |
 
 ---
 

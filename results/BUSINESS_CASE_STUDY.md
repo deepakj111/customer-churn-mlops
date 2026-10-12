@@ -72,6 +72,16 @@ Across a simulated production cohort of 10,000 customers with a 26.5% base churn
 | **Forfeited Churn Value ($C_{FN}$ Loss)** | \$631,500 | \$287,500 | **-\$344,000 saved** |
 | **Net Portfolio Cost / Loss** | **\$737,800** | **\$565,400** | **+$172,400 Net Profit** |
 
+### Financial Trade-off & Asymmetric Matrix Visualizations
+
+| Net Economic Savings Across Cohort | Asymmetric Error Matrix Trade-off |
+|:---:|:---:|
+| ![Business Impact & Savings](figures/evaluation/business_impact.png) | ![Confusion Matrices](figures/evaluation/confusion_matrices.png) |
+
+| Decision Threshold Sensitivity & Loss Minimization |
+|:---:|
+| ![Threshold Sensitivity Curve](figures/evaluation/threshold_sensitivity.png) |
+
 ---
 
 ## 4. Moving from Predictive to Prescriptive: Causal Uplift

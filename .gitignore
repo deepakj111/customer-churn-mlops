@@ -32,6 +32,8 @@ data/**/*.npy
 *.joblib
 *.model
 mlruns/
+reports/
+
 
 # Results directory is tracked for documentation and evaluation reporting
 !results/**

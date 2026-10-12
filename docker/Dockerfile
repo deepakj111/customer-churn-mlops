@@ -79,6 +79,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY configs/ ./configs/
 COPY data/raw/ ./data/raw/
+COPY models/ ./models/
 COPY main.py ./
 
 # Create a non-root user for security.

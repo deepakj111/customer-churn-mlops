@@ -30,31 +30,42 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
-import joblib
-import mlflow
-import mlflow.sklearn
-import numpy as np
-import pandas as pd
-from dotenv import load_dotenv
-from mlflow.models import infer_signature
-from prefect import flow, task
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+# Ensure project root is on sys.path for `src.*` and `pipelines.*` imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.data.ingest import load_for_training
-from src.data.preprocess import run_preprocessing
-from src.data.validate import validate_raw_data
-from src.models.calibration_diagnostics import compute_calibration_report
-from src.models.conformal import ConformalChurnPredictor
-from src.models.evaluate import evaluate, print_evaluation_report
-from src.models.fairness_audit import run_fairness_audit
-from src.models.pipeline import build_pipeline
-from src.models.threshold import find_cost_optimal_threshold, find_f1_optimal_threshold
-from src.utils.config_loader import get_config
-from src.utils.logging import get_logger
+import joblib  # noqa: E402
+import mlflow  # noqa: E402
+import mlflow.sklearn  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
+from mlflow.models import infer_signature  # noqa: E402
+from prefect import flow, task  # noqa: E402
+from sklearn.calibration import CalibratedClassifierCV  # noqa: E402
+from sklearn.model_selection import (  # noqa: E402
+    StratifiedKFold,
+    cross_val_score,
+    train_test_split,
+)
+
+from src.data.ingest import load_for_training  # noqa: E402
+from src.data.preprocess import run_preprocessing  # noqa: E402
+from src.data.validate import validate_raw_data  # noqa: E402
+from src.models.calibration_diagnostics import compute_calibration_report  # noqa: E402
+from src.models.conformal import ConformalChurnPredictor  # noqa: E402
+from src.models.evaluate import evaluate, print_evaluation_report  # noqa: E402
+from src.models.fairness_audit import run_fairness_audit  # noqa: E402
+from src.models.pipeline import build_pipeline  # noqa: E402
+from src.models.threshold import (  # noqa: E402
+    find_cost_optimal_threshold,
+    find_f1_optimal_threshold,
+)
+from src.utils.config_loader import get_config  # noqa: E402
+from src.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger("training_pipeline")
 
@@ -157,7 +168,7 @@ def train_and_tune_task(
         y_train,
         cv=cv,
         scoring=cfg.training.cv_scoring,
-        n_jobs=-1,
+        n_jobs=1,
     )
     cv_mean = round(float(cv_scores.mean()), 4)
     cv_std = round(float(cv_scores.std()), 4)

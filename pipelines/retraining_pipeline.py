@@ -24,28 +24,32 @@ import argparse
 import datetime
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
-import joblib
-import mlflow
-import mlflow.sklearn
-import pandas as pd
-from dotenv import load_dotenv
-from mlflow.models import infer_signature
-from prefect import flow, task
-from sklearn.model_selection import StratifiedKFold, cross_val_score
+# Ensure project root is on sys.path for `src.*` and `pipelines.*` imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.data.ingest import load_for_training
-from src.data.preprocess import run_preprocessing
-from src.data.validate import validate_raw_data
-from src.models.pipeline import build_pipeline
-from src.models.statistical_comparison import corrected_cv_ttest
-from src.monitoring.drift_detector import DriftDetector, DriftReport
-from src.monitoring.reference_builder import load_reference_dataset
-from src.serving.model_loader import get_model
-from src.utils.config_loader import get_config
-from src.utils.logging import get_logger
+import joblib  # noqa: E402
+import mlflow  # noqa: E402
+import mlflow.sklearn  # noqa: E402
+import pandas as pd  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
+from mlflow.models import infer_signature  # noqa: E402
+from prefect import flow, task  # noqa: E402
+from sklearn.model_selection import StratifiedKFold, cross_val_score  # noqa: E402
+
+from src.data.ingest import load_for_training  # noqa: E402
+from src.data.preprocess import run_preprocessing  # noqa: E402
+from src.data.validate import validate_raw_data  # noqa: E402
+from src.models.pipeline import build_pipeline  # noqa: E402
+from src.models.statistical_comparison import corrected_cv_ttest  # noqa: E402
+from src.monitoring.drift_detector import DriftDetector, DriftReport  # noqa: E402
+from src.monitoring.reference_builder import load_reference_dataset  # noqa: E402
+from src.serving.model_loader import get_model  # noqa: E402
+from src.utils.config_loader import get_config  # noqa: E402
+from src.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger("retraining_pipeline")
 
@@ -56,7 +60,6 @@ def monitor_drift_task() -> dict[str, Any]:
     Compute numerical PSI, categorical Chi-squared, and prediction drift.
     """
     logger.info("Executing drift monitoring task...")
-    cfg = get_config()
     ref_df = load_reference_dataset()
 
     # Load current incoming dataset
@@ -68,9 +71,13 @@ def monitor_drift_task() -> dict[str, Any]:
     active_model = get_model()
     current_proba = active_model.predict_proba(current_X)[:, 1]
 
-    detector = DriftDetector(reference_df=ref_df, config=cfg)
+    from src.features.feature_store import engineer_features
+
+    current_engineered = engineer_features(current_X)
+
+    detector = DriftDetector(reference_df=ref_df)
     report: DriftReport = detector.generate_report(
-        current_df=current_X,
+        current_df=current_engineered,
         current_proba=pd.Series(current_proba),
     )
 
@@ -149,7 +156,7 @@ def retrain_challenger_task() -> dict[str, Any]:
         + 1,  # different seed to test generalizability
     )
     challenger_scores = cross_val_score(
-        challenger_pipeline, X, y, cv=cv, scoring="roc_auc", n_jobs=-1
+        challenger_pipeline, X, y, cv=cv, scoring="roc_auc", n_jobs=1
     )
     challenger_pipeline.fit(X, y)
 
@@ -189,7 +196,7 @@ def compare_champion_challenger_task(
         random_state=cfg.training.random_state + 1,
     )
     champion_scores = cross_val_score(
-        active_champion, X, y, cv=cv, scoring="roc_auc", n_jobs=-1
+        active_champion, X, y, cv=cv, scoring="roc_auc", n_jobs=1
     )
 
     n_total = len(X)

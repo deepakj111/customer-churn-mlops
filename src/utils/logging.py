@@ -84,6 +84,7 @@ def get_logger(
     logger.setLevel(level)
 
     # Select formatter based on LOG_FORMAT environment variable
+    formatter: logging.Formatter
     if LOG_FORMAT_TYPE == "json":
         formatter = _JSONFormatter()
     else:

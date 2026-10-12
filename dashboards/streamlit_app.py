@@ -940,6 +940,25 @@ with tab_drift:
                 elif m.get("metric") == "DataDriftTable":
                     drift_table = m.get("result", {}).get("drift_by_columns", {})
 
+            if not dataset_drift and "overall_drift_detected" in drift_data:
+                is_drifted = drift_data.get("overall_drift_detected", False)
+                n_drifted = drift_data.get("n_drifted_features", 0)
+                n_total = len(drift_data.get("features", [])) or 47
+                dataset_drift = {
+                    "dataset_drift": is_drifted,
+                    "number_of_drifted_features": n_drifted,
+                    "number_of_columns": n_total,
+                }
+                if "features" in drift_data:
+                    drift_table = {
+                        item["feature"]: {
+                            "drift_score": item["drift_score"],
+                            "drift_detected": item["is_drifted"],
+                            "stat_test_name": item.get("method", "PSI / Chi2"),
+                        }
+                        for item in drift_data["features"]
+                    }
+
             if dataset_drift:
                 st.markdown("#### Dataset Drift Summary")
                 col_d1, col_d2 = st.columns(2)
@@ -1231,7 +1250,7 @@ with tab_docs:
         """
                          ┌─────────────────────────────────────────┐
                          │            GitHub Actions CI/CD         │
-                         │   Lint → Test (281) → Docker Build &    │
+                         │   Lint → Test (303) → Docker Build &    │
                          │   Push Image to Container Registry      │
                          └───────────────┬─────────────────────────┘
                                          │
@@ -1284,7 +1303,7 @@ with tab_docs:
     with col_docs2:
         st.markdown("#### 🧪 Quality & CI/CD")
         st.markdown(
-            "- **Testing**: 281 tests with pytest (Unit, Integration, Data Validation).\\n"
+            "- **Testing**: 303 tests with pytest (Unit, Integration, Data Validation).\\n"
             "- **Data Validation**: Pandera schemas enforce data contracts.\\n"
             "- **GitHub Actions**: Automated linting (Black, Flake8), type-checking (mypy), and testing on PR."
         )
